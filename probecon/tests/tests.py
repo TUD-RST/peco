@@ -5,7 +5,7 @@ from probecon.system_models.models import StateSpaceEnv
 class TestStateSpaceEnv(unittest.TestCase):
 
     def test_init_correct_input(self):
-        ode = lambda t, state, control: np.array([-state[0] + control, -state[1]])
+        ode = lambda t, state, control: np.array([-state[0] + control[0], -state[1]])
         state_dim = 2
         control_dim = 1
         time_step = 0.01
@@ -14,7 +14,7 @@ class TestStateSpaceEnv(unittest.TestCase):
         state_cost = np.array([1, 1])
         control_cost = np.array([1])
         env = StateSpaceEnv(state_dim, control_dim, ode, time_step, init_state, goal_state=init_state, state_cost=state_cost, control_cost=control_cost)
-        pass
+        return env
 
     def test_init_wrong_input(self):
         ode = lambda t, state, control: np.array([-state[0] + control[0], -state[1]])
@@ -34,6 +34,20 @@ class TestStateSpaceEnv(unittest.TestCase):
         pass
 
     def test_simulation(self):
+        env = self.test_init_correct_input()
+        control = np.array([0.])
+        state = env._simulation(control)
+        ref = np.array([0.99004983, -0.99004983])
+        assert(np.all(np.isclose(ref, state)))
+        pass
+
+    def test_step(self):
+        env = self.test_init_correct_input()
+        control = np.array([0.])
+        state, cost, done, dummy = env.step(control)
+        ref = np.array([0.99004983, -0.99004983])
+        assert(np.all(np.isclose(ref, state)))
+        assert(not done)
         pass
 
 if __name__ == '__main__':
