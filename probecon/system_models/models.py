@@ -2,6 +2,8 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 import numpy as np
+from scipy.integrate import solve_ivp
+import pickle
 
 class StateSpaceEnv(gym.Env):
     """State-space environment.
@@ -14,15 +16,23 @@ class StateSpaceEnv(gym.Env):
 
 
     """
-    def __init__(self, state_dim, control_dim, ode, time_step, init_state, goal_state=None, state_cost=None, control_cost=None):
+    def __init__(self, state_dim, control_dim, ode, time_step, init_state,
+                 goal_state=None,
+                 state_cost=None,
+                 control_cost=None,
+                 state_bounds=None,
+                 control_bounds=None):
 
         self.state_dim = state_dim
         self.control_dim = control_dim
         # create spaces
-        control_bounds = np.inf * np.ones(control_dim)
-        state_bounds = np.inf * np.ones(state_dim)
-        self.control_space = spaces.Box(-control_bounds, control_bounds)
+        if isinstance(state_bounds, type(None)):
+            state_bounds = np.inf * np.ones(state_dim)
+        if isinstance(control_bounds, type(None)):
+            control_bounds = np.inf * np.ones(control_dim)
+
         self.state_space = spaces.Box(-state_bounds, state_bounds)
+        self.control_space = spaces.Box(-control_bounds, control_bounds)
 
         # test ODEs output using the inital state and zero as input
         assert(ode(0, init_state, np.zeros(control_dim)).shape == (state_dim,))
@@ -34,6 +44,7 @@ class StateSpaceEnv(gym.Env):
         self.time_step = time_step
 
         # set initial state value
+        # todo: init state can be callable to allow for distributions x0~p(x0)
         if init_state.shape == (state_dim,):
             self.init_state = init_state
         else:
@@ -56,42 +67,65 @@ class StateSpaceEnv(gym.Env):
         # initialize cost
         self._cost_init(state_cost, control_cost)
         
-
+        # seeding
         self.seed()
 
         # initialize trajectory (time_steps, state/control dim)
         self.trajectory = {'time': np.array([0]), 'states': np.stack([init_state]), 'controls': None}
 
     def step(self, control):
+        """ Do one step in the environment.
+
+               Args:
+                   state (ndarray): State vector with shape (state_dim, )
+                   control (ndarray): Control input vector with shape (control_dim, )
+
+               Returns:
+                   state (ndarray): New state after taking the step
+                   reward (float): Reward (-cost) for taking the step
+                   done (bool):
+
+               """
         if control.shape != (self.control_dim,):
             raise AssertionError("'control' has to be an array with shape '(control_dim,)'")
         self.old_state = self.state
-        self.state = self._simulation(self.state)
-        self._append_trajectory(self.state, control)
-
+        self.state = self._simulation(control)
+        self._append_transition(self.state, control)
         reward = -self._eval_cost(self.state, control)
         done = False
         return self.state, reward, done, {}
 
     def reset(self):
-        self.old_state = None
-        self.state = self.init_state
+        self._set_state(self.init_state)
         return self.state
 
     def render(self):
+        """ gym.Env method """
         pass
 
     def close(self):
+        """ gym.Env method """
         pass
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
+    def save_trajectory(self, filename, path):
+        with open(path + filename + '.p', 'wb') as open_file:
+            pickle.dump(self.trajectory, open_file)
+
     def _set_state(self, state):
         self.old_state = None
         self.state = state
+        # initialize trajectory (time_steps, state/control dim)
+        self.trajectory = {'time': np.array([0]), 'states': np.stack([self.init_state]), 'controls': None}
         return self.state
+
+    def _simulation(self, control):
+        sol = solve_ivp(lambda t, state: self.ode(t, state, control), (0, self.time_step), self.state, t_eval=[self.time_step])
+        state = sol.y.ravel()
+        return state
 
     def _cost_init(self, state_cost, control_cost):
         # terms of a quadratic cost
@@ -131,17 +165,27 @@ class StateSpaceEnv(gym.Env):
         cost = 0.5*(state_cost + control_cost)
         return cost
 
-    def _append_trajectory(self, state, control):
+    def _append_transition(self, state, control):
+        """ Quadratic cost function.
+
+               Args:
+                   state (ndarray): State vector with shape (state_dim, )
+                   control (ndarray): Control input vector with shape (control_dim, )
+
+               Returns:
+                   cost (float): Cost
+
+               """
         # append state
         states = self.trajectory['states']
-        self.trajectory['states'] = np.stack([states, state])
+        self.trajectory['states'] = np.concatenate((states, state.reshape(1, self.state_dim)))
 
         # append control input
         controls = self.trajectory['controls']
         if controls == None:
-            self.trajectory['control inputs'] = np.stack([control])
+            self.trajectory['control inputs'] = control.reshape(1, self.control_dim)
         else:
-            self.trajectory['control inputs'] = np.stack([controls, control])
+            self.trajectory['control inputs'] = np.concatenate((controls, control.reshape(1, self.control_dim)))
 
         # append time
         time = self.trajectory['time']
