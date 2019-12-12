@@ -71,6 +71,8 @@ class StateSpaceEnv(gym.Env):
         # initialize trajectory (time_steps, state/control dim)
         self.trajectory = {'time': np.array([0]), 'states': np.stack([init_state]), 'controls': None}
 
+        self.viewer = None
+
     def step(self, control):
         """ Do one step in the environment.
 
