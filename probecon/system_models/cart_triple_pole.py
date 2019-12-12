@@ -1,8 +1,28 @@
 import sympy as sp
 import symbtools as st
+import numpy as np
 from symbtools import modeltools as mt
 
 from probecon.system_models.core import StateSpaceEnv
+
+class CartTriplePole(StateSpaceEnv):
+    def __init__(self, time_step, init_state,
+                 goal_state=None,
+                 state_cost=None,
+                 control_cost=None,
+                 state_bounds=None,
+                 control_bounds=None):
+        state_dim = 8
+        control_dim = 1
+        # dummy ODE:
+        ode = lambda t, state, control: np.array([state[4], state[5], state[6], state[7], -state[1], -state[2], -state[3], -state[0]])
+
+        super(CartTriplePole).__init__(state_dim, control_dim, ode, time_step, init_state,
+                 goal_state=goal_state,
+                 state_cost=state_cost,
+                 control_cost=control_cost,
+                 state_bounds=state_bounds,
+                 control_bounds=control_bounds)
 
 
 
