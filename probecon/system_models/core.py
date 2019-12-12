@@ -92,8 +92,17 @@ class StateSpaceEnv(gym.Env):
         self.state = self._simulation(control)
         self._append_transition(self.state, control)
         reward = -self._eval_cost(self.state, control)
-        done = False
-        return self.state, reward, done, {}
+        done = self._done()
+        info = {}
+        return self.state, reward, done, info
+
+    def random_step(self):
+        if self.control_space.is_bounded():
+            random_control = self.control_space.sample()
+        else:
+            random_control = np.random.uniform(-1., 1., self.control_dim)
+        state, reward, done, info = self.step(random_control)
+        return state, reward, done, info
 
     def reset(self):
         """ Reset the environment to it's initial state and delete the trajectory.
@@ -105,12 +114,15 @@ class StateSpaceEnv(gym.Env):
         self._set_state(self.init_state)
         return self.state
 
+
     def render(self):
         """ gym.Env method """
         pass
 
     def close(self):
-        """ gym.Env method """
+        if self.viewer:
+            self.viewer.close()
+            self.viewer = None
         pass
 
     def seed(self, seed=None):
@@ -227,3 +239,12 @@ class StateSpaceEnv(gym.Env):
         time = self.trajectory['time']
         self.trajectory['time'] = np.append(time, time[-1]+self.time_step)
         pass
+
+    def _done(self):
+        return not self.state_space.contains(self.state)
+
+
+
+class Parameters(object):
+    "Container Class for parameters."
+    pass

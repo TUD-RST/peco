@@ -4,17 +4,23 @@ import numpy as np
 from numpy import pi, inf
 from symbtools import modeltools as mt
 
-from probecon.system_models.core import StateSpaceEnv
+from probecon.system_models.core import StateSpaceEnv, Parameters
 
 class CartTriplePole(StateSpaceEnv):
     def __init__(self, time_step=0.01, init_state=np.zeros(8),
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
-                 state_bounds=np.array([2., 2*pi, 2*pi, 2*pi, inf, inf, inf, inf]),
+                 state_bounds=np.array([2.4, 2*pi, 2*pi, 2*pi, inf, inf, inf, inf]),
                  control_bounds=np.array([1.])):
         state_dim = 8
         control_dim = 1
+
+        # dummy parameters:
+        self.p = Parameters()
+        self.p.l1 = .5
+        self.p.l2 = .5
+        self.p.l3 = .5
         # dummy ODE:
         ode = lambda t, state, control: np.array([state[4], state[5], state[6], state[7], -state[1], -state[2], -state[3], -state[0]])
 
@@ -29,12 +35,11 @@ class CartTriplePole(StateSpaceEnv):
         screen_width = 600
         screen_height = 400
 
-        world_width = self.state_space.bounded_above[0]* 2
+        world_width = self.state_space.high[0] * 2
         scale = screen_width / world_width
-        carty = 100  # TOP OF CART
+        carty = 200  # TOP OF CART
         polewidth = 10.0
-        length = 1.0
-        polelen = scale * (length)
+        polelen = scale * self.p.l1
         cartwidth = 50.0
         cartheight = 30.0
 
@@ -48,34 +53,59 @@ class CartTriplePole(StateSpaceEnv):
             cart.add_attr(self.carttrans)
             self.viewer.add_geom(cart)
             l, r, t, b = -polewidth / 2, polewidth / 2, polelen - polewidth / 2, -polewidth / 2
-            pole = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
-            pole.set_color(.8, .6, .4)
-            self.poletrans = rendering.Transform(translation=(0, axleoffset))
-            pole.add_attr(self.poletrans)
-            pole.add_attr(self.carttrans)
-            self.viewer.add_geom(pole)
-            self.axle = rendering.make_circle(polewidth / 2)
-            self.axle.add_attr(self.poletrans)
-            self.axle.add_attr(self.carttrans)
-            self.axle.set_color(.5, .5, .8)
-            self.viewer.add_geom(self.axle)
+            pole1 = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+            pole1.set_color(.8, .6, .4)
+            self.pole1trans = rendering.Transform(translation=(0, axleoffset))
+            pole1.add_attr(self.pole1trans)
+            pole1.add_attr(self.carttrans)
+            pole2 = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+            pole2.set_color(.8, .6, .4)
+            self.pole2trans = rendering.Transform(translation=(0, self.p.l2*scale))
+            pole2.add_attr(self.pole2trans)
+            pole2.add_attr(self.pole1trans)
+            pole2.add_attr(self.carttrans)
+            pole3 = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+            pole3.set_color(.8, .6, .4)
+            self.pole3trans = rendering.Transform(translation=(0, self.p.l3*scale))
+            pole3.add_attr(self.pole3trans)
+            pole3.add_attr(self.pole2trans)
+            pole3.add_attr(self.pole1trans)
+            pole3.add_attr(self.carttrans)
+
+            self.viewer.add_geom(pole1)
+            self.viewer.add_geom(pole2)
+            self.viewer.add_geom(pole3)
+            self.axle1 = rendering.make_circle(1.2 * polewidth / 2)
+            self.axle1.add_attr(self.pole1trans)
+            self.axle1.add_attr(self.carttrans)
+            self.axle1.set_color(.5, .5, .8)
+            self.viewer.add_geom(self.axle1)
+            self.axle2 = rendering.make_circle(1.2 * polewidth / 2)
+            self.axle2.add_attr(self.pole2trans)
+            self.axle2.add_attr(self.pole1trans)
+            self.axle2.add_attr(self.carttrans)
+            self.axle2.set_color(.5, 0., .8)
+            self.viewer.add_geom(self.axle2)
+            self.axle3 = rendering.make_circle(1.2 * polewidth / 2)
+            self.axle3.add_attr(self.pole3trans)
+            self.axle3.add_attr(self.pole2trans)
+            self.axle3.add_attr(self.pole1trans)
+            self.axle3.add_attr(self.carttrans)
+            self.axle3.set_color(.5, .5, .8)
+            self.viewer.add_geom(self.axle3)
             self.track = rendering.Line((0, carty), (screen_width, carty))
             self.track.set_color(0, 0, 0)
             self.viewer.add_geom(self.track)
 
-            self._pole_geom = pole
-
         if self.state is None: return None
 
-        # Edit the pole polygon vertex
-        pole = self._pole_geom
-        l, r, t, b = -polewidth / 2, polewidth / 2, polelen - polewidth / 2, -polewidth / 2
-        pole.v = [(l, b), (l, t), (r, t), (r, b)]
+        pos, th1, th2, th3 = self.state[0:4]
 
-        x = self.state
-        cartx = x[0] * scale + screen_width / 2.0  # MIDDLE OF CART
+        cartx = pos * scale + screen_width / 2.0  # MIDDLE OF CART
         self.carttrans.set_translation(cartx, carty)
-        self.poletrans.set_rotation(-x[2])
+        self.pole1trans.set_rotation(th1)
+        self.pole2trans.set_rotation(th2 - th1)
+        self.pole3trans.set_rotation(th3 - th2 - th1)
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
@@ -195,5 +225,7 @@ def modeling():
 
 if __name__ == '__main__':
     # unittest.main()
-    env = CartTriplePole()
-    env.render()
+    env = CartTriplePole(init_state=np.random.uniform(-1, 1, 8))
+    for steps in range(10000):
+        env.random_step()
+        env.render()
