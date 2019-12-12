@@ -13,8 +13,6 @@ class StateSpaceEnv(gym.Env):
     ode (function): ODE, right hand sight of the differential equation
     init_state (ndarray):
 
-
-
     """
     def __init__(self, state_dim, control_dim, ode, time_step, init_state,
                  goal_state=None,
@@ -96,6 +94,12 @@ class StateSpaceEnv(gym.Env):
         return self.state, reward, done, {}
 
     def reset(self):
+        """ Reset the environment to it's initial state and delete the trajectory.
+
+        Returns:
+            state (ndarray): current state of the system
+
+        """
         self._set_state(self.init_state)
         return self.state
 
@@ -112,22 +116,51 @@ class StateSpaceEnv(gym.Env):
         return [seed]
 
     def save_trajectory(self, filename, path):
+        """ Saves the current trajectory to a pickle file.
+
+        Args:
+            filename (string): Saving filename
+            path (string): Saving path
+
+        """
         with open(path + filename + '.p', 'wb') as open_file:
             pickle.dump(self.trajectory, open_file)
+        pass
 
     def _set_state(self, state):
+        """ Deletes the trajectory and sets the environments state to 'state'.
+
+        Args:
+            state (ndarray): State
+
+        """
         self.old_state = None
         self.state = state
         # initialize trajectory (time_steps, state/control dim)
         self.trajectory = {'time': np.array([0]), 'states': np.stack([self.init_state]), 'controls': None}
-        return self.state
+        pass
 
     def _simulation(self, control):
+        """Simulation of the environment for one time step starting in the current state.
+
+        Args:
+            control (ndarray): Control input
+
+        Returns:
+            state (ndarray): State after simulation
+        """
         sol = solve_ivp(lambda t, state: self.ode(t, state, control), (0, self.time_step), self.state, t_eval=[self.time_step])
         state = sol.y.ravel()
         return state
 
     def _cost_init(self, state_cost, control_cost):
+        """ Initialization of the cost.
+
+                Args:
+                    state_cost (ndarray): Cost of the state
+                    control_cost (ndarray): Cost of the control
+
+                """
         # terms of a quadratic cost
         if isinstance(state_cost, type(None)):
             self.state_cost = np.diag(np.zeros(self.state_dim))
@@ -147,6 +180,7 @@ class StateSpaceEnv(gym.Env):
                 self.control_cost = control_cost
             else:
                 raise AssertionError("'control_cost' has to be an array with shape '(control_dim,)' or '(control_dim, control_dim)'")
+        pass
 
     def _eval_cost(self, state, control):
         """ Quadratic cost function.
