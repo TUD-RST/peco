@@ -1,14 +1,10 @@
 import sympy as sp
 import symbtools as st
 import numpy as np
-import gym
-from gym.wrappers import Monitor
-from gym.wrappers.monitoring.video_recorder import VideoRecorder
-from numpy import pi, inf
-from symbtools import modeltools as mt
-import pickle
 import pyglet
 
+from numpy import pi, inf
+from gym.wrappers.monitoring.video_recorder import VideoRecorder
 from probecon.system_models.core import SymbtoolsEnv, Parameters
 from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
@@ -18,6 +14,7 @@ class CartPole(SymbtoolsEnv):
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
+                 cost_function=None,
                  state_bounds=np.array([2*pi, 1., inf, inf]),
                  control_bounds=np.array([0.]),
                  mod_file='symbtools_models/cart_pole.p',
@@ -44,12 +41,13 @@ class CartPole(SymbtoolsEnv):
 
 
         super(CartPole, self).__init__(mod_file, self.p, time_step, init_state,
-                 goal_state=goal_state,
-                 state_cost=state_cost,
-                 control_cost=control_cost,
-                 state_bounds=state_bounds,
-                 control_bounds=control_bounds,
-                 part_lin=part_lin)
+                                       goal_state=goal_state,
+                                       state_cost=state_cost,
+                                       control_cost=control_cost,
+                                       cost_function=cost_function,
+                                       state_bounds=state_bounds,
+                                       control_bounds=control_bounds,
+                                       part_lin=part_lin)
 
     def render(self, mode='human'):
         screen_width = 800

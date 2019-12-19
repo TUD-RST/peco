@@ -1,10 +1,10 @@
 import sympy as sp
 import symbtools as st
-import pickle
 import numpy as np
-from numpy import pi, inf
 import pyglet
-from symbtools import modeltools as mt
+
+from numpy import pi, inf
+
 from probecon.system_models.core import SymbtoolsEnv, Parameters
 from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model

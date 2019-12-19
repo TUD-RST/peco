@@ -22,6 +22,7 @@ class StateSpaceEnv(gym.Env):
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
+                 cost_function=None,
                  state_bounds=None,
                  control_bounds=None):
 
@@ -81,6 +82,10 @@ class StateSpaceEnv(gym.Env):
             'render.modes': ['human', 'rgb_array'],
             'video.frames_per_second': int(1 / time_step)
         }
+
+        # if explicit cost function is given overwrite quadratic
+        if callable(cost_function):
+            self._eval_cost = cost_function
 
     def step(self, control):
         """ Take one step in the environment. Forward simulation.
@@ -224,7 +229,7 @@ class StateSpaceEnv(gym.Env):
         return cost
 
     def _append_transition(self, state, control):
-        """ Quadratic cost function.
+        """ Save transition in trajectory.
 
                Args:
                    state (ndarray): State vector with shape (state_dim, )
@@ -260,6 +265,7 @@ class SymbtoolsEnv(StateSpaceEnv):
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
+                 cost_function=None,
                  state_bounds=None,
                  control_bounds=None,
                  part_lin=False):
@@ -293,11 +299,12 @@ class SymbtoolsEnv(StateSpaceEnv):
         ode = lambda t, x, u: self.state_eq(*x, *u, *self._params_vals()).ravel()
 
         super(SymbtoolsEnv, self).__init__(state_dim, control_dim, ode, time_step, init_state,
-                 goal_state=goal_state,
-                 state_cost=state_cost,
-                 control_cost=control_cost,
-                 state_bounds=state_bounds,
-                 control_bounds=control_bounds)
+                                           goal_state=goal_state,
+                                           state_cost=state_cost,
+                                           control_cost=control_cost,
+                                           cost_function=cost_function,
+                                           state_bounds=state_bounds,
+                                           control_bounds=control_bounds)
 
     def _params_vals(self):
         return list(self.p.__dict__.values())

@@ -1,6 +1,7 @@
 import sympy as sp
 import symbtools as st
 import numpy as np
+
 from numpy import pi, inf
 
 from probecon.system_models.core import SymbtoolsEnv, Parameters
