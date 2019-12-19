@@ -51,6 +51,4 @@ class TestStateSpaceEnv(unittest.TestCase):
         pass
 
 if __name__ == '__main__':
-    # unittest.main()
-    env = CartTriplePole()
-    env.render()
+    unittest.main()
