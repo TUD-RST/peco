@@ -3,19 +3,21 @@ import symbtools as st
 import pickle
 import numpy as np
 from numpy import pi, inf
+import pyglet
 from symbtools import modeltools as mt
 from probecon.system_models.core import SymbtoolsEnv, Parameters
+from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 class CartDoublePole(SymbtoolsEnv):
-    def __init__(self, time_step=0.01, init_state=np.zeros(6),
+    def __init__(self, time_step=0.0125, init_state=np.zeros(6),
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
-                 state_bounds=np.array([1.5, 2*pi, 2*pi, inf, inf, inf]),
+                 state_bounds=np.array([2*pi, 2*pi, 1.5, inf, inf, inf]),
                  control_bounds=np.array([0.]),
                  mod_file='symbtools_models/cart_double_pole.p',
-                 part_lin=True,
+                 part_lin=False,
                  m0=3.34,
                  m1=0.8512,
                  m2=0.8973,
@@ -57,7 +59,7 @@ class CartDoublePole(SymbtoolsEnv):
 
     def render(self, mode='human'):
         screen_width = 800
-        world_width = (self.state_space.high[0] + self.p.l1 + self.p.l2)*2
+        world_width = (self.state_space.high[2] + self.p.l1 + self.p.l2)*2
         scale = (screen_width) / world_width
         pole1len = scale * self.p.l1
         pole2len = scale * self.p.l2
@@ -128,9 +130,21 @@ class CartDoublePole(SymbtoolsEnv):
             axle2.set_color(.2, .2, .2)
             self.viewer.add_geom(axle2)
 
+            # add time label
+            self.label = pyglet.text.Label('',
+                                           font_name='Times New Roman',
+                                           font_size=12,
+                                           x=0.1 * screen_width,
+                                           y=0.9 * screen_height,
+                                           color=(0, 0, 0, 255))
+            self.viewer.add_geom(DrawText(self.label))
+
         if self.state is None: return None
 
-        pos, th1, th2 = self.state[0:3]
+        time = self.trajectory['time'][-1]
+        self.label.text = '{0:.2f} s'.format(time, '2f')
+
+        th1, th2, pos = self.state[0:3]
 
         cartx = pos * scale + screen_width / 2.0  # MIDDLE OF CART
         self.carttrans.set_translation(cartx, carty)
@@ -146,14 +160,11 @@ def modeling():
     F = sp.Symbol('F')
 
     # generalized coordinates
-    qq = sp.Matrix(sp.symbols("q0:3")) # generalized coordinates
-    q0, q1, q2 = qq
+    qq = sp.Matrix(sp.symbols('q1, q2, q0')) # generalized coordinates
+    q1, q2, q0 = qq
 
     # generalized velocities
-    dq0, dq1, dq2 = st.time_deriv(qq, qq)
-
-    # generalized velocities
-    ddq0, ddq1, ddq2 = st.time_deriv(qq, qq, order=2)
+    dq1, dq2, dq0 = st.time_deriv(qq, qq)
 
     # position vectors
     p0 = sp.Matrix([q0, 0])
@@ -178,7 +189,7 @@ def modeling():
     R = (d0*dq0**2 + d1*dq1**2 + d2*(dq2 - dq1)**2)/2
 
     # external generalized forces
-    Q = sp.Matrix([F, 0, 0])
+    Q = sp.Matrix([0, 0, F])
 
     # Lagrange equations of the second kind
     # d/dt(dL/d(dq_i/dt)) - dL/dq_i + dR/d(dq_i/dt)= Q_
@@ -187,7 +198,7 @@ def modeling():
 
 if __name__ == '__main__':
     modeling()
-    init_state = np.array([1.5, -0.5*np.pi, -0.5*np.pi, 0, 0, 0])
+    init_state = np.array([-0.5*np.pi, -0.5*np.pi, 1.5, 0, 0, 0])
     env = CartDoublePole(init_state=init_state)#init_state=np.random.uniform(-1, 1, 8))
     for steps in range(10000):
         state, cost, done, info = env.random_step()

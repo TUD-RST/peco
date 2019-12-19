@@ -18,10 +18,10 @@ class CartPole(SymbtoolsEnv):
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
-                 state_bounds=np.array([1., 2*pi, inf, inf]),
+                 state_bounds=np.array([2*pi, 1., inf, inf]),
                  control_bounds=np.array([0.]),
                  mod_file='symbtools_models/cart_pole.p',
-                 part_lin=True,
+                 part_lin=False,
                  m0=3.34,
                  m1=0.3583,
                  J1=0.0379999,
@@ -54,7 +54,7 @@ class CartPole(SymbtoolsEnv):
     def render(self, mode='human'):
         screen_width = 800
 
-        world_width = (self.state_space.high[0]+self.p.l1) * 2
+        world_width = (self.state_space.high[1]+self.p.l1) * 2
         scale = (screen_width) / world_width
         polelen = scale * self.p.l1
         screen_height = 2.5*polelen
@@ -118,7 +118,7 @@ class CartPole(SymbtoolsEnv):
 
         time = self.trajectory['time'][-1]
         self.label.text = '{0:.2f} s'.format(time, '2f')
-        pos, th = self.state[0:2]
+        th, pos = self.state[0:2]
 
         cartx = pos * scale + screen_width / 2.0  # MIDDLE OF CART
         self.carttrans.set_translation(cartx, carty)
@@ -134,11 +134,11 @@ def modeling():
     F = sp.Symbol('F')
 
     # generalized coordinates
-    qq = sp.Matrix(sp.symbols("q0:2")) # generalized coordinates
-    q0, q1 = qq
+    qq = sp.Matrix(sp.symbols('q1, q0')) # generalized coordinates
+    q1, q0 = qq
 
     # generalized velocities
-    dq0, dq1 = st.time_deriv(qq, qq)
+    dq1, dq0 = st.time_deriv(qq, qq)
 
     # position vectors
     p0 = sp.Matrix([q0, 0])
@@ -160,7 +160,7 @@ def modeling():
     R = (d0*dq0**2 + d1*dq1**2)/2
 
     # generalized forces
-    Q = [F, 0]
+    Q = [0, F]
 
     # Lagrange equations of the second kind
     # d/dt(dL/d(dq_i/dt)) - dL/dq_i + dR/d(dq_i/dt)= Q_i
@@ -169,7 +169,7 @@ def modeling():
 
 if __name__ == '__main__':
     modeling()
-    init_state = np.array([0.5, -0.5*np.pi, 0., 0.])
+    init_state = np.array([-0.5*np.pi, 0.5, 0., 0.])
     env = CartPole(init_state=init_state)
     #vid = VideoRecorder(env, 'recording/video.mp4')
     env.reset()

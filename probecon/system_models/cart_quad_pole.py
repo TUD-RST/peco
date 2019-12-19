@@ -11,13 +11,14 @@ from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 class CartQuadPole(SymbtoolsEnv):
-    def __init__(self, time_step=0.01, init_state=np.zeros(6),
+    def __init__(self, time_step=0.0125, init_state=np.zeros(6),
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
-                 state_bounds=np.array([1., 2*pi, 2*pi, 2*pi, 2*pi, inf, inf, inf, inf, inf]),
-                 control_bounds=np.array([10.]),
+                 state_bounds=np.array([2*pi, 2*pi, 2*pi, 2*pi, 1.5, inf, inf, inf, inf, inf]),
+                 control_bounds=np.array([0.]),
                  mod_file='symbtools_models/cart_quad_pole.p',
+                 part_lin=True,
                  m0=3.34,
                  m1=0.8512,
                  m2=0.8973,
@@ -69,15 +70,16 @@ class CartQuadPole(SymbtoolsEnv):
         self.p.g = g
 
         super(CartQuadPole, self).__init__(mod_file, self.p, time_step, init_state,
-                 goal_state=goal_state,
-                 state_cost=state_cost,
-                 control_cost=control_cost,
-                 state_bounds=state_bounds,
-                 control_bounds=control_bounds)
+                                           goal_state=goal_state,
+                                           state_cost=state_cost,
+                                           control_cost=control_cost,
+                                           state_bounds=state_bounds,
+                                           control_bounds=control_bounds,
+                                           part_lin=part_lin)
 
     def render(self, mode='human'):
         screen_width = 800
-        world_width = (self.state_space.high[0] + self.p.l1 + self.p.l2 + self.p.l3 + self.p.l4)*2
+        world_width = (self.state_space.high[4] + self.p.l1 + self.p.l2 + self.p.l3 + self.p.l4)*2
         scale = (screen_width) / world_width
         pole1len = scale * self.p.l1
         pole2len = scale * self.p.l2
@@ -205,7 +207,7 @@ class CartQuadPole(SymbtoolsEnv):
 
         time = self.trajectory['time'][-1]
         self.label.text = '{0:.2f} s'.format(time, '2f')
-        pos, th1, th2, th3, th4 = self.state[0:5]
+        th1, th2, th3, th4, pos = self.state[0:5]
 
         cartx = pos * scale + screen_width / 2.0  # MIDDLE OF CART
         self.carttrans.set_translation(cartx, carty)
@@ -223,11 +225,11 @@ def modeling():
     F = sp.Symbol('F')
 
     # generalized coordinates
-    qq = sp.Matrix(sp.symbols("q0:5")) # generalized coordinates
-    q0, q1, q2, q3, q4 = qq
+    qq = sp.Matrix(sp.symbols('q1, q2, q3, q4, q0')) # generalized coordinates
+    q1, q2, q3, q4, q0 = qq
 
     # generalized velocities
-    dq0, dq1, dq2, dq3, dq4 = st.time_deriv(qq, qq)
+    dq1, dq2, dq3, dq4, dq0 = st.time_deriv(qq, qq)
 
     # position vectors
     p0 = sp.Matrix([q0, 0])
@@ -258,26 +260,18 @@ def modeling():
     R = (d0*dq0**2 + d1*dq1**2 + d2*(dq2 - dq1)**2 + d3*(dq3 - dq2)**2 + d4*(dq4 - dq3)**2)/2
 
     # external generalized forces
-    Q = sp.Matrix([F, 0, 0, 0, 0])
+    Q = sp.Matrix([0, 0, 0, 0, F])
 
     # Lagrange equations of the second kind
     # d/dt(dL/d(dq_i/dt)) - dL/dq_i + dR/d(dq_i/dt)= Q_i
-
-    mod = mt.generate_symbolic_model(T, V, qq, Q, dissipation_function=R, simplify=False)
-
-    # save the model
-    mod.calc_state_eq(simplify=False)
-    mod.params = params
-    with open('symbtools_models/cart_quad_pole.p', 'wb') as open_file:
-        pickle.dump(mod, open_file)
+    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_models/cart_quad_pole.p')
     return mod
 
 if __name__ == '__main__':
     #modeling()
-    print('done modeling')
     # unittest.main()
-    init_state = np.array([1.5, -0.5 * np.pi, -0.5 * np.pi, -0.5 * np.pi,-0.5 * np.pi,0, 0, 0, 0, 0])
+    init_state = np.array([-0.5 * np.pi, -0.5 * np.pi, -0.5 * np.pi,-0.5 * np.pi, 1.5, 0, 0, 0, 0, 0])
     env = CartQuadPole(init_state=init_state)#init_state=np.random.uniform(-1, 1, 8))
-    for steps in range(10000):
+    for steps in range(100):
         state, cost, done, info = env.random_step()
         env.render()
