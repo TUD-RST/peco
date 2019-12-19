@@ -2,16 +2,20 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 import numpy as np
+import sympy as sp
 from scipy.integrate import solve_ivp
 import pickle
+import symbtools as st
 
 class StateSpaceEnv(gym.Env):
     """State-space environment.
 
-    state_dimension (int):
-    control_dimension (int):
+    state_dim (int): dimension of the state space
+    control_dim(int): dimension of the control input space
     ode (function): ODE, right hand sight of the differential equation
-    init_state (ndarray):
+    init_state (ndarray): initial state
+    state_bounds (ndarray): box constraints of the state space
+    control_bound (ndarray): box constraints of the control input space
 
     """
     def __init__(self, state_dim, control_dim, ode, time_step, init_state,
@@ -73,8 +77,13 @@ class StateSpaceEnv(gym.Env):
 
         self.viewer = None
 
+        self.metadata = {
+            'render.modes': ['human', 'rgb_array'],
+            'video.frames_per_second': int(1 / time_step)
+        }
+
     def step(self, control):
-        """ Do one step in the environment.
+        """ Take one step in the environment. Forward simulation.
 
                Args:
                    state (ndarray): State vector with shape (state_dim, )
@@ -116,7 +125,8 @@ class StateSpaceEnv(gym.Env):
 
 
     def render(self):
-        """ gym.Env method """
+        """ gym.Env method for rendering. """
+        NotImplementedError
         pass
 
     def close(self):
@@ -243,6 +253,54 @@ class StateSpaceEnv(gym.Env):
     def _done(self):
         return not self.state_space.contains(self.state)
 
+
+class SymbtoolsEnv(StateSpaceEnv):
+    def __init__(self, mod_file, params, time_step,
+                 init_state=None,
+                 goal_state=None,
+                 state_cost=None,
+                 control_cost=None,
+                 state_bounds=None,
+                 control_bounds=None,
+                 part_lin=False):
+
+        # parameters:
+        self.p = params
+
+        # load mod file
+        with open(mod_file, 'rb') as open_file:
+            self.mod = pickle.load(open_file)
+        if part_lin:
+            if isinstance(self.mod.ff, type(None)):
+                NotImplementedError
+            state_eq = self.mod.ff + self.mod.gg*self.mod.uu
+        else:
+            state_eq = self.mod.f + self.mod.g*self.mod.uu #self.mod.state_eq
+        try:
+            import sympy_to_c as sp2c
+            self.state_eq = sp2c.convert_to_c((*self.mod.xx, *self.mod.uu, *self.mod.params), state_eq, use_exisiting_so=False)
+            print('c code')
+        except:
+            self.state_eq = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params), state_eq, modules="numpy")  # creating a callable python function
+
+        state_dim = self.mod.xx.__len__()
+        control_dim = self.mod.uu.__len__()
+
+        # check if parameters are aligned
+        for key, param in zip(self.p.__dict__.keys(), self.mod.params):
+            assert(key==str(param))
+
+        ode = lambda t, x, u: self.state_eq(*x, *u, *self._params_vals()).ravel()
+
+        super(SymbtoolsEnv, self).__init__(state_dim, control_dim, ode, time_step, init_state,
+                 goal_state=goal_state,
+                 state_cost=state_cost,
+                 control_cost=control_cost,
+                 state_bounds=state_bounds,
+                 control_bounds=control_bounds)
+
+    def _params_vals(self):
+        return list(self.p.__dict__.values())
 
 
 class Parameters(object):
