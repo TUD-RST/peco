@@ -15,7 +15,7 @@ class CartDoublePole(SymbtoolsEnv):
                  state_cost=None,
                  control_cost=None,
                  state_bounds=np.array([2*pi, 2*pi, 1.5, inf, inf, inf]),
-                 control_bounds=np.array([0.]),
+                 control_bounds=np.array([15.]),
                  mod_file='cart_double_pole.p',
                  part_lin=False,
                  m0=3.34,
@@ -142,7 +142,7 @@ class CartDoublePole(SymbtoolsEnv):
         if self.state is None: return None
 
         time = self.trajectory['time'][-1]
-        self.label.text = '{0:.2f} s'.format(time, '2f')
+        self.label.text = '{0:.2f} s'.format(time)
 
         th1, th2, pos = self.state[0:3]
 

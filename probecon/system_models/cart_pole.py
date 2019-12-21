@@ -117,7 +117,7 @@ class CartPole(SymbtoolsEnv):
         if self.state is None: return None
 
         time = self.trajectory['time'][-1]
-        self.label.text = '{0:.2f} s'.format(time, '2f')
+        self.label.text = '{0:.2f} s'.format(time)
         th, pos = self.state[0:2]
 
         cartx = pos * scale + screen_width / 2.0  # MIDDLE OF CART

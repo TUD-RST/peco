@@ -15,7 +15,7 @@ class CartQuadPole(SymbtoolsEnv):
                  state_cost=None,
                  control_cost=None,
                  state_bounds=np.array([2*pi, 2*pi, 2*pi, 2*pi, 1.5, inf, inf, inf, inf, inf]),
-                 control_bounds=np.array([0.]),
+                 control_bounds=np.array([15.]),
                  mod_file='cart_quad_pole.p',
                  part_lin=True,
                  m0=3.34,
@@ -205,7 +205,7 @@ class CartQuadPole(SymbtoolsEnv):
         if self.state is None: return None
 
         time = self.trajectory['time'][-1]
-        self.label.text = '{0:.2f} s'.format(time, '2f')
+        self.label.text = '{0:.2f} s'.format(time)
         th1, th2, th3, th4, pos = self.state[0:5]
 
         cartx = pos * scale + screen_width / 2.0  # MIDDLE OF CART

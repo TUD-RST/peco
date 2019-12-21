@@ -1,10 +1,12 @@
 import sympy as sp
 import symbtools as st
 import numpy as np
+import pyglet
 
 from numpy import pi, inf
 
 from probecon.system_models.core import SymbtoolsEnv, Parameters
+from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 class Pendulum(SymbtoolsEnv):
@@ -66,7 +68,19 @@ class Pendulum(SymbtoolsEnv):
             axle.set_color(.2, .2, .2)
             self.viewer.add_geom(axle)
 
+            # add time label
+            self.label = pyglet.text.Label('',
+                                           font_name='Times New Roman',
+                                           font_size=12,
+                                           x=0.1 * screen_width,
+                                           y=0.9 * screen_height,
+                                           color=(0, 0, 0, 255))
+            self.viewer.add_geom(DrawText(self.label))
+
         if self.state is None: return None
+
+        time = self.trajectory['time'][-1]
+        self.label.text = '{0:.2f} s'.format(time)
 
         th = self.state[0]
         self.poletrans.set_rotation(th)
@@ -95,15 +109,15 @@ def modeling():
     dp0 = st.time_deriv(p0, qq)
 
     # kinetic energy T
-    T_rot = (J0*dq0**2)/2
-    T_trans = (m0*dp0.dot(dp0))/2
+    T_rot = (J0*dq0**2)*0.5
+    T_trans = (m0*dp0.dot(dp0))*0.5
     T = T_rot + T_trans
 
     # potential energy V
     V = m0*g*p0[1]
 
     # dissipation function R (Rayleigh dissipation)
-    R = (d0*dq0**2)/2
+    R = (d0*dq0**2)*0.5
 
     # external generalized forces
     Q = sp.Matrix([tau])
@@ -114,7 +128,7 @@ def modeling():
     return mod
 
 if __name__ == '__main__':
-    #modeling()
+    modeling()
     env = Pendulum()
     for i in range(1000):
         env.random_step()
