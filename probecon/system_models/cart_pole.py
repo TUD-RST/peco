@@ -2,12 +2,14 @@ import sympy as sp
 import symbtools as st
 import numpy as np
 import pyglet
+import pickle
 
 from numpy import pi, inf
 from gym.wrappers.monitoring.video_recorder import VideoRecorder
 from probecon.system_models.core import SymbtoolsEnv, Parameters
 from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
+
 
 class CartPole(SymbtoolsEnv):
     def __init__(self, time_step=0.01, init_state=np.zeros(4),
@@ -16,9 +18,9 @@ class CartPole(SymbtoolsEnv):
                  control_cost=None,
                  cost_function=None,
                  state_bounds=np.array([2*pi, 1., inf, inf]),
-                 control_bounds=np.array([0.]),
-                 mod_file='symbtools_models/cart_pole.p',
-                 part_lin=False,
+                 control_bounds=np.array([10.]),
+                 mod_file='cart_pole.p',
+                 part_lin=True,
                  m0=3.34,
                  m1=0.3583,
                  J1=0.0379999,
@@ -26,7 +28,7 @@ class CartPole(SymbtoolsEnv):
                  a1=0.43,
                  d0=0.1,
                  d1=0.006588,
-                 g = 9.81):
+                 g=9.81):
 
         # parameters:
         self.p = Parameters()
@@ -147,15 +149,15 @@ def modeling():
     dp1 = st.time_deriv(p1, qq)
 
     # kinetic energy T
-    T_rot = (J1*dq1**2)/2
-    T_trans = (m0*dp0.dot(dp0) + m1*dp1.dot(dp1))/2
+    T_rot = (J1*dq1**2)*0.5
+    T_trans = (m0*dp0.dot(dp0) + m1*dp1.dot(dp1))*0.5
     T = T_rot + T_trans
 
     # potential energy V
     V = m1*g*p1[1]
 
     # dissipation function R (Rayleigh dissipation)
-    R = (d0*dq0**2 + d1*dq1**2)/2
+    R = (d0*dq0**2 + d1*dq1**2)*0.5
 
     # generalized forces
     Q = [0, F]
@@ -166,7 +168,6 @@ def modeling():
     return mod
 
 if __name__ == '__main__':
-    modeling()
     init_state = np.array([-0.5*np.pi, 0.5, 0., 0.])
     env = CartPole(init_state=init_state)
     #vid = VideoRecorder(env, 'recording/video.mp4')

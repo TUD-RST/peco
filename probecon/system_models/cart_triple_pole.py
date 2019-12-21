@@ -10,13 +10,13 @@ from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 class CartTriplePole(SymbtoolsEnv):
-    def __init__(self, time_step=0.0125, init_state=np.zeros(6),
+    def __init__(self, time_step=0.0125, init_state=np.zeros(8),
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
                  state_bounds=np.array([2*pi, 2*pi, 2*pi, 1., inf, inf, inf, inf]),
                  control_bounds=np.array([0.]),
-                 mod_file='symbtools_models/cart_triple_pole.p',
+                 mod_file='cart_triple_pole.p',
                  part_lin=True,
                  m0=3.34,
                  m1=0.8512,
@@ -211,15 +211,15 @@ def modeling():
     dp3 = st.time_deriv(p3, qq)
 
     # kinetic energy T
-    T_rot = (J1*dq1**2 + J2*dq2**2 + J3*dq3**2)/2
-    T_trans = (m0*dp0.dot(dp0) + m1*dp1.dot(dp1) + m2*dp2.dot(dp2) + m3*dp3.dot(dp3))/2
+    T_rot = (J1*dq1**2 + J2*dq2**2 + J3*dq3**2)*0.5
+    T_trans = (m0*dp0.dot(dp0) + m1*dp1.dot(dp1) + m2*dp2.dot(dp2) + m3*dp3.dot(dp3))*0.5
     T = T_rot + T_trans
 
     # potential energy V
     V = m1*g*p1[1] + m2*g*p2[1] + m3*g*p3[1]
 
     # dissipation function R (Rayleigh dissipation)
-    R = (d0*dq0**2 + d1*dq1**2 + d2*(dq2 - dq1)**2 + d3*(dq3 - dq2)**2)/2
+    R = (d0*dq0**2 + d1*dq1**2 + d2*(dq2 - dq1)**2 + d3*(dq3 - dq2)**2)*0.5
 
     # external generalized forces
     Q = sp.Matrix([F, 0, 0, 0])
@@ -230,11 +230,9 @@ def modeling():
     return mod
 
 if __name__ == '__main__':
-    modeling()
-    print('done modeling')
-    # unittest.main()
-    init_state = np.array([-0.5 * np.pi, -0.5 * np.pi, -0.5 * np.pi, 1.5, 0, 0, 0, 0])
-    env = CartTriplePole(init_state=init_state)#init_state=np.random.uniform(-1, 1, 8))
+    #modeling()
+    init_state = np.array([-0.5 * np.pi, -0.5 * np.pi, -0.5 * np.pi, 0.5, 0, 0, 0, 0])
+    env = CartTriplePole(init_state=init_state, time_step=0.02)#init_state=np.random.uniform(-1, 1, 8))
     for steps in range(10000):
         state, cost, done, info = env.random_step()
         env.render()

@@ -14,7 +14,7 @@ class Pendulum(SymbtoolsEnv):
                  control_cost=None,
                  state_bounds=np.array([2*pi, inf]),
                  control_bounds=np.array([1.]),
-                 mod_file='symbtools_models/pendulum.p',
+                 mod_file='pendulum.p',
                  m0=0.3583,
                  J0=0.0379999,
                  l0=0.5,
@@ -114,7 +114,7 @@ def modeling():
     return mod
 
 if __name__ == '__main__':
-    modeling()
+    #modeling()
     env = Pendulum()
     for i in range(1000):
         env.random_step()

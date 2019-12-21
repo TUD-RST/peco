@@ -1,4 +1,5 @@
 import gym
+import os
 from gym import spaces
 from gym.utils import seeding
 import numpy as np
@@ -131,8 +132,7 @@ class StateSpaceEnv(gym.Env):
 
     def render(self):
         """ gym.Env method for rendering. """
-        NotImplementedError
-        pass
+        raise NotImplementedError
 
     def close(self):
         if self.viewer:
@@ -152,7 +152,7 @@ class StateSpaceEnv(gym.Env):
             path (string): Saving path
 
         """
-        with open(path + filename + '.p', 'wb') as open_file:
+        with open(path + filename + '.p', 'w') as open_file:
             pickle.dump(self.trajectory, open_file)
         pass
 
@@ -274,11 +274,15 @@ class SymbtoolsEnv(StateSpaceEnv):
         self.p = params
 
         # load mod file
+        package_file_directory = os.path.dirname(os.path.abspath(__file__))
+        if mod_file.find('/') == -1:
+            # if file only contains the filename, use the packages model fiels
+            mod_file = os.path.join(package_file_directory, 'symbtools_models', mod_file)
         with open(mod_file, 'rb') as open_file:
-            self.mod = pickle.load(open_file)
+            self.mod =  pickle.load(open_file)
         if part_lin:
             if isinstance(self.mod.ff, type(None)):
-                NotImplementedError
+                raise NotImplementedError
             state_eq = self.mod.ff + self.mod.gg*self.mod.uu
         else:
             state_eq = self.mod.f + self.mod.g*self.mod.uu #self.mod.state_eq

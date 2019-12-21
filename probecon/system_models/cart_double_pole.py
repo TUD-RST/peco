@@ -16,7 +16,7 @@ class CartDoublePole(SymbtoolsEnv):
                  control_cost=None,
                  state_bounds=np.array([2*pi, 2*pi, 1.5, inf, inf, inf]),
                  control_bounds=np.array([0.]),
-                 mod_file='symbtools_models/cart_double_pole.p',
+                 mod_file='cart_double_pole.p',
                  part_lin=False,
                  m0=3.34,
                  m1=0.8512,
@@ -178,15 +178,15 @@ def modeling():
     dp2 = st.time_deriv(p2, qq)
 
     # kinetic energy T
-    T_rot = (J1*dq1**2 + J2*dq2**2)/2
-    T_trans = (m0*dp0.dot(dp0) + m1*dp1.dot(dp1) + m2*dp2.dot(dp2))/2
+    T_rot = (J1*dq1**2 + J2*dq2**2)*0.5
+    T_trans = (m0*dp0.dot(dp0) + m1*dp1.dot(dp1) + m2*dp2.dot(dp2))*0.5
     T = T_rot + T_trans
 
     # potential energy V
     V = m1*g*p1[1] + m2*g*p2[1]
 
     # dissipation function R (Rayleigh dissipation)
-    R = (d0*dq0**2 + d1*dq1**2 + d2*(dq2 - dq1)**2)/2
+    R = (d0*dq0**2 + d1*dq1**2 + d2*(dq2 - dq1)**2)*0.5
 
     # external generalized forces
     Q = sp.Matrix([0, 0, F])
@@ -198,7 +198,7 @@ def modeling():
 
 if __name__ == '__main__':
     modeling()
-    init_state = np.array([-0.5*np.pi, -0.5*np.pi, 1.5, 0, 0, 0])
+    init_state = np.array([-0.5*np.pi, -0.5*np.pi, 1, 0, 0, 0])
     env = CartDoublePole(init_state=init_state)#init_state=np.random.uniform(-1, 1, 8))
     for steps in range(10000):
         state, cost, done, info = env.random_step()
