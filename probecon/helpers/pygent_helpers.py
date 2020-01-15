@@ -1,6 +1,6 @@
 from pygent.environments import StateSpaceModel
 
-class EnvWrapper(StateSpaceModel):
+class PygentEnvWrapper(StateSpaceModel):
     """ Wrapping StateSpaceEnv environment """
 
     def __init__(self, environment):
@@ -9,7 +9,7 @@ class EnvWrapper(StateSpaceModel):
         cost = self.eval_cost
         x0 = environment.init_state
         dt = environment.time_step
-        super(EnvWrapper, self).__init__(ode, cost, x0, uDim, dt)
+        super(PygentEnvWrapper, self).__init__(ode, cost, x0, uDim, dt)
         self.uMax = environment.control_space.high
         self.environment = environment
 
@@ -23,4 +23,3 @@ class EnvWrapper(StateSpaceModel):
 
     def animation(self):
         return NotImplementedError
-
