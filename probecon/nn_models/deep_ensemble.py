@@ -121,6 +121,10 @@ class DeepEnsemble(nn.Module):
         variance = sigma2 + sigma2_mod
         return mean, variance, sigma2_mod
 
+    def weighted_forward(self, x, alpha):
+        mean, variance, sigma2_mod = self.forward(x)
+        return torch.exp(-alpha*sigma2_mod)*mean
+
     def training(self, x, y, batchsize, epochs, loss='nll', lr=1e-3, weight_decay=1e-5):
         """ Training process. """
 
