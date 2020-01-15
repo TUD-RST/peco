@@ -10,10 +10,11 @@ from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 class CartDoublePole(SymbtoolsEnv):
-    def __init__(self, time_step=0.0125, init_state=np.zeros(6),
+    def __init__(self, time_step=0.0125, init_state=np.array([pi, pi, 0., 0., 0., 0.]),
                  goal_state=None,
-                 state_cost=None,
-                 control_cost=None,
+                 state_cost=np.array([5., 5.,  10., 0.01, 0.01, 0.01]),
+                 control_cost=np.array([0.1]),
+                 cost_function=None,
                  state_bounds=np.array([2*pi, 2*pi, 1.5, inf, inf, inf]),
                  control_bounds=np.array([15.]),
                  mod_file='cart_double_pole.p',
@@ -49,12 +50,13 @@ class CartDoublePole(SymbtoolsEnv):
         self.p.g = g
 
         super(CartDoublePole, self).__init__(mod_file, self.p, time_step, init_state,
-                 goal_state=goal_state,
-                 state_cost=state_cost,
-                 control_cost=control_cost,
-                 state_bounds=state_bounds,
-                 control_bounds=control_bounds,
-                 part_lin=part_lin)
+                                             goal_state=goal_state,
+                                             state_cost=state_cost,
+                                             control_cost=control_cost,
+                                             cost_function=cost_function,
+                                             state_bounds=state_bounds,
+                                             control_bounds=control_bounds,
+                                             part_lin=part_lin)
 
 
     def render(self, mode='human'):

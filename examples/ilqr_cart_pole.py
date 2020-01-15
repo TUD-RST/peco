@@ -1,5 +1,5 @@
 import numpy as np
-from probecon.helpers.pygent_helpers import EnvWrapper
+from probecon.helpers.pygent_helpers import PygentEnvWrapper
 from probecon.system_models.cart_pole import CartPole
 
 from pygent.algorithms.ilqr import iLQR
@@ -19,8 +19,8 @@ t = 5
 dt = 0.02
 
 env = CartPole(time_step=dt, init_state=init_state, cost_function=c_k, part_lin=True)
-env = EnvWrapper(env)
+env = PygentEnvWrapper(env)
 path = '../../results/ilqr/cart_pole/' # path, where results are saved
 
-algorithm = iLQR(env, t, dt, path=path, fcost=c_N, constrained=True) # instance of the iLQR algorithm
+algorithm = iLQR(env, t, dt, path=path, constrained=True) # instance of the iLQR algorithm
 algorithm.run_optim() # run trajectory optimization

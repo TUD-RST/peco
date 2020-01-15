@@ -10,7 +10,7 @@ from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 class CartTriplePole(SymbtoolsEnv):
-    def __init__(self, time_step=0.0125, init_state=np.zeros(8),
+    def __init__(self, time_step=0.03, init_state=np.zeros(8),
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
@@ -233,6 +233,6 @@ if __name__ == '__main__':
     #modeling()
     init_state = np.array([-0.5 * np.pi, -0.5 * np.pi, -0.5 * np.pi, 0.5, 0, 0, 0, 0])
     env = CartTriplePole(init_state=init_state, time_step=0.02)#init_state=np.random.uniform(-1, 1, 8))
-    for steps in range(10000):
+    for steps in range(1000):
         state, cost, done, info = env.random_step()
         env.render()

@@ -10,7 +10,7 @@ from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 class CartQuadPole(SymbtoolsEnv):
-    def __init__(self, time_step=0.02, init_state=np.zeros(10),
+    def __init__(self, time_step=0.04, init_state=np.zeros(10),
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,

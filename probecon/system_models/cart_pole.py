@@ -12,15 +12,16 @@ from probecon.helpers.symbtools_helpers import create_save_model
 
 
 class CartPole(SymbtoolsEnv):
-    def __init__(self, time_step=0.01, init_state=np.zeros(4),
+    def __init__(self, time_step=0.01, init_state=np.array([pi, 0., 0., 0.]),
                  goal_state=None,
-                 state_cost=None,
-                 control_cost=None,
+                 state_cost=np.array([5., 10., 0.01, 0.01]),
+                 control_cost=np.array([0.1]),
                  cost_function=None,
                  state_bounds=np.array([2*pi, 1., inf, inf]),
                  control_bounds=np.array([10.]),
                  mod_file='cart_pole.p',
                  part_lin=True,
+                 ode_error=None,
                  m0=3.34,
                  m1=0.3583,
                  J1=0.0379999,
@@ -49,7 +50,8 @@ class CartPole(SymbtoolsEnv):
                                        cost_function=cost_function,
                                        state_bounds=state_bounds,
                                        control_bounds=control_bounds,
-                                       part_lin=part_lin)
+                                       part_lin=part_lin,
+                                       ode_error=ode_error)
 
     def render(self, mode='human'):
         screen_width = 800

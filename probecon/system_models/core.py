@@ -7,6 +7,7 @@ import sympy as sp
 from scipy.integrate import solve_ivp
 import pickle
 import symbtools as st
+import matplotlib.pyplot as plt
 
 class StateSpaceEnv(gym.Env):
     """State-space environment.
@@ -25,7 +26,9 @@ class StateSpaceEnv(gym.Env):
                  control_cost=None,
                  cost_function=None,
                  state_bounds=None,
-                 control_bounds=None):
+                 control_bounds=None,
+                 ode_error=None,
+                 noise=None):
 
         self.state_dim = state_dim
         self.control_dim = control_dim
@@ -40,8 +43,13 @@ class StateSpaceEnv(gym.Env):
 
         # test ODEs output using the inital state and zero as input
         assert(ode(0, init_state, np.zeros(control_dim)).shape == (state_dim,))
-        # init ODE
-        self.ode = ode  # ODE(t, state, control)
+
+        # ODE error term
+        if ode_error is not None:
+            assert(ode_error(0, init_state, np.zeros(control_dim)).shape == (state_dim,))
+            self.ode = lambda t, state, control: ode(t, state, control) + ode_error(t, state, control)
+        else:
+            self.ode = ode
 
         if not isinstance(time_step, float):
             raise TypeError("'time_step' has to be a float")
@@ -144,6 +152,19 @@ class StateSpaceEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
+    def plot(self):
+        time = self.trajectory['time']
+        states = self.trajectory['states']
+        controls = self.trajectory['controls']
+        plt.subplot(211)
+        plt.plot(time, states)
+        plt.legend([r'$x_'+str(i+1)+'$' for i in range(self.state_dim)])
+        plt.subplot(212)
+        plt.plot(time[:-1], controls)
+        plt.legend([r'$u_' + str(i+1) + '$' for i in range(self.control_dim)])
+        plt.xlabel(r't[s]')
+        pass
+
     def save_trajectory(self, filename, path):
         """ Saves the current trajectory to a pickle file.
 
@@ -166,7 +187,7 @@ class StateSpaceEnv(gym.Env):
         self.old_state = None
         self.state = state
         # initialize trajectory (time_steps, state/control dim)
-        self.trajectory = {'time': np.array([0]), 'states': np.stack([self.init_state]), 'controls': None}
+        self.trajectory = {'time': np.array([[0]]), 'states': np.stack([self.init_state]), 'controls': None}
         pass
 
     def _simulation(self, control):
@@ -191,8 +212,8 @@ class StateSpaceEnv(gym.Env):
 
                 """
         # terms of a quadratic cost
-        if isinstance(state_cost, type(None)):
-            self.state_cost = np.diag(np.zeros(self.state_dim))
+        if state_cost is None:
+            self.state_cost = np.diag(np.ones(self.state_dim))
         else:
             if state_cost.ndim == 1 and state_cost.shape[0] == self.state_dim:
                 self.state_cost = np.diag(state_cost)
@@ -200,8 +221,8 @@ class StateSpaceEnv(gym.Env):
                 self.state_cost = state_cost
             else:
                 raise AssertionError("'state_cost' has to be an array with shape (state_dim,) or (state_dim, state_dim)")
-        if isinstance(control_cost, type(None)):
-            self.control_cost = np.diag(np.zeros(self.control_dim))
+        if control_cost is None:
+            self.control_cost = np.diag(np.ones(self.control_dim))
         else:
             if control_cost.ndim == 1 and control_cost.shape[0] == self.control_dim:
                 self.control_cost = np.diag(control_cost)
@@ -245,14 +266,14 @@ class StateSpaceEnv(gym.Env):
 
         # append control input
         controls = self.trajectory['controls']
-        if controls == None:
-            self.trajectory['control inputs'] = control.reshape(1, self.control_dim)
+        if controls is None:
+            self.trajectory['controls'] = control.reshape(1, self.control_dim)
         else:
-            self.trajectory['control inputs'] = np.concatenate((controls, control.reshape(1, self.control_dim)))
+            self.trajectory['controls'] = np.concatenate((controls, control.reshape(1, self.control_dim)))
 
         # append time
         time = self.trajectory['time']
-        self.trajectory['time'] = np.append(time, time[-1]+self.time_step)
+        self.trajectory['time'] = np.append(time, np.array([time[-1]+self.time_step]), axis=0)
         pass
 
     def _done(self):
@@ -268,7 +289,8 @@ class SymbtoolsEnv(StateSpaceEnv):
                  cost_function=None,
                  state_bounds=None,
                  control_bounds=None,
-                 part_lin=False):
+                 part_lin=False,
+                 ode_error=None):
 
         # parameters:
         self.p = params
@@ -281,17 +303,17 @@ class SymbtoolsEnv(StateSpaceEnv):
         with open(mod_file, 'rb') as open_file:
             self.mod =  pickle.load(open_file)
         if part_lin:
-            if isinstance(self.mod.ff, type(None)):
+            if self.mod.ff is None:
                 raise NotImplementedError
-            state_eq = self.mod.ff + self.mod.gg*self.mod.uu
+            self.state_eq_expr = self.mod.ff + self.mod.gg*self.mod.uu
         else:
-            state_eq = self.mod.f + self.mod.g*self.mod.uu #self.mod.state_eq
+            self.state_eq_expr = self.mod.f + self.mod.g*self.mod.uu #self.mod.state_eq
         try:
             import sympy_to_c as sp2c
-            self.state_eq = sp2c.convert_to_c((*self.mod.xx, *self.mod.uu, *self.mod.params), state_eq, use_exisiting_so=False)
+            self.state_eq_fnc = sp2c.convert_to_c((*self.mod.xx, *self.mod.uu, *self.mod.params), self.state_eq_expr, use_exisiting_so=False)
             print('c code')
         except:
-            self.state_eq = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params), state_eq, modules="numpy")  # creating a callable python function
+            self.state_eq_fnc = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params), self.state_eq_expr, modules="numpy")  # creating a callable python function
 
         state_dim = self.mod.xx.__len__()
         control_dim = self.mod.uu.__len__()
@@ -300,7 +322,7 @@ class SymbtoolsEnv(StateSpaceEnv):
         for key, param in zip(self.p.__dict__.keys(), self.mod.params):
             assert(key==str(param))
 
-        ode = lambda t, x, u: self.state_eq(*x, *u, *self._params_vals()).ravel()
+        ode = lambda t, x, u: self.state_eq_fnc(*x, *u, *self._params_vals()).ravel()
 
         super(SymbtoolsEnv, self).__init__(state_dim, control_dim, ode, time_step, init_state,
                                            goal_state=goal_state,
@@ -308,7 +330,9 @@ class SymbtoolsEnv(StateSpaceEnv):
                                            control_cost=control_cost,
                                            cost_function=cost_function,
                                            state_bounds=state_bounds,
-                                           control_bounds=control_bounds)
+                                           control_bounds=control_bounds,
+                                           ode_error=ode_error)
+
 
     def _params_vals(self):
         return list(self.p.__dict__.values())
