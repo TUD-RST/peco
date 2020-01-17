@@ -18,7 +18,10 @@ class TrajectoryOptimization(object):
     def solve(self):
         if self.algorithm == 'ilqr':
             self.ocp.run_optim()
-            sol = {'x_sim':self.ocp.xx, 'u_sim': self.ocp.uu, 'J_f': self.ocp.cost}
+            sol = {'x_sim':self.ocp.xx, 'u_sim': self.ocp.uu, 'J_f': self.ocp.cost,
+                   'kk': self.ocp.kk,
+                   'K': self.ocp.KK,
+                   'alpha': self.ocp.current_alpha}
         else:
             sol = self.ocp.solve()
         return sol
