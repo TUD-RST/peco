@@ -23,22 +23,31 @@ class TrajectoryDataSet(Dataset):
 
 
 class TransitionDataSet(Dataset):
-    def __init__(self, file=None, traj_data_set=None, batch_size=1, shuffle=False):
+    def __init__(self, state_dim, control_dim, file=None, data_set=None, batch_size=1, shuffle=False, type='continuous', ode=None, second_order=True):
         if file is not None:
             with open(file, 'rb') as open_file:
                 self.trajectories = pickle.load(open_file)
         else:
             self.trajectories = []
-        if traj_data_set is not None:
-            self.trajectories.update(traj_data_set.trajectories)
+        if data_set is not None:
+            self.trajectories.update(data_set.trajectories)
 
         self.transitions = {}
 
         for trajectory in self.trajectories:
             self.add_trajectory(trajectory)
 
+        self.type = type
         self.batch_size = batch_size
         self.shuffle = shuffle
+        if ode is not None:
+            self.ode = ode
+        self.state_dim = state_dim
+        self.control_dim = control_dim
+        if second_order and state_dim % 2 == 0:
+            self.output_dim = int(state_dim/2)
+        else:
+            self.output_dim = state_dim
 
     def __len__(self):
         return self.transitions['time'].__len__()
@@ -57,11 +66,11 @@ class TransitionDataSet(Dataset):
 
     def add_trajectory(self, trajectory):
         self.trajectories.append(trajectory)
-        old_states = torch.tensor(trajectory['states'][:-1])
-        controls = torch.tensor(trajectory['controls'])
-        states = torch.tensor(trajectory['states'][1:])
-        time = torch.tensor(trajectory['time'][:-1])
-        time_steps = torch.tensor(trajectory['time'][1:]-trajectory['time'][:-1])
+        old_states = torch.tensor(trajectory['states'][:-1], dtype=torch.float32)
+        controls = torch.tensor(trajectory['controls'], dtype=torch.float32)
+        states = torch.tensor(trajectory['states'][1:], dtype=torch.float32)
+        time = torch.tensor(trajectory['time'][:-1], dtype=torch.float32)
+        time_steps = torch.tensor(trajectory['time'][1:]-trajectory['time'][:-1], dtype=torch.float32)
         if list(self.transitions.keys())==[]:
             self.transitions['old_states'] = old_states
             self.transitions['controls'] = controls
@@ -95,13 +104,25 @@ class TransitionDataSet(Dataset):
         old_state, control, state, time, time_step = self.__getitem__(item)
         return old_state, control, state
 
-    def get_batches_discrete(self):
-        return [(old_state, control, state)
-                for old_state, control, state, time, time_step in self.dataloader()]
+    def get_batches(self):
+        if self.type=='continuous':
+                return [(torch.cat((old_state, control), 1),
+                         ((state - old_state) / time_step
+                          - self.batch_ode(old_state, control))[:, self.state_dim-self.output_dim:])
+                        for old_state, control, state, time, time_step in self.dataloader()]
+        elif self.type=='discrete':
+                return [(torch.cat((old_state, control), 1),
+                         (state - old_state
+                          - time_step*self.batch_ode(old_state, control))[:, self.state_dim - self.output_dim:])
+                        for old_state, control, state, time, time_step in self.dataloader()]
+        else:
+            raise ValueError
 
-    def get_batches_continuous(self):
-        return [(old_state, control, (state - old_state) / time_step)
-                for old_state, control, state, time, time_step in self.dataloader()]
+    def batch_ode(self, states, controls):
+        rhs = torch.tensor([self.ode(0, state, control) for (state, control) in zip(states, controls)],
+                           dtype=torch.float32)
+        return rhs
+
     def dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, shuffle=self.shuffle)
 
@@ -115,8 +136,3 @@ if __name__ == '__main__':
             env.random_step()
         tset.add_trajectory(env.trajectory)
 
-    for x, u, dx in tset.get_batches_continuous():
-        print(x, u, dx)
-
-    for x, u, x_ in tset.get_batches_discrete():
-        print(x, u, x_)
