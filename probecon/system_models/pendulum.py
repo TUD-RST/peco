@@ -14,9 +14,11 @@ class Pendulum(SymbtoolsEnv):
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
+                 cost_function=None,
                  state_bounds=np.array([2*pi, inf]),
                  control_bounds=np.array([1.]),
                  mod_file='pendulum.p',
+                 ode_error=None,
                  m0=0.3583,
                  J0=0.0379999,
                  l0=0.5,
@@ -33,12 +35,15 @@ class Pendulum(SymbtoolsEnv):
         self.p.g = g
         self.p.d0 = d0
 
-        super(Pendulum, self).__init__(mod_file, self.p, time_step, init_state,
-                 goal_state=goal_state,
-                 state_cost=state_cost,
-                 control_cost=control_cost,
-                 state_bounds=state_bounds,
-                 control_bounds=control_bounds)
+        super(Pendulum, self).__init__(mod_file, self.p, time_step,
+                                       init_state=init_state,
+                                       goal_state=goal_state,
+                                       state_cost=state_cost,
+                                       control_cost=control_cost,
+                                       cost_function=cost_function,
+                                       state_bounds=state_bounds,
+                                       control_bounds=control_bounds,
+                                       ode_error=ode_error)
 
     def render(self, mode='human'):
         screen_width = 400
@@ -79,7 +84,7 @@ class Pendulum(SymbtoolsEnv):
 
         if self.state is None: return None
 
-        time = self.trajectory['time'][-1]
+        time = self.trajectory['time'][-1][0]
         self.label.text = '{0:.2f} s'.format(time)
 
         th = self.state[0]
@@ -124,7 +129,7 @@ def modeling():
 
     # Lagrange equations of the second kind
     # d/dt(dL/d(dq_i/dt)) - dL/dq_i + dR/d(dq_i/dt)= Q_i
-    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_models/cart_pole.p')
+    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_models/pendulum.p')
     return mod
 
 if __name__ == '__main__':

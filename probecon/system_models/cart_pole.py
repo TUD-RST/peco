@@ -43,7 +43,8 @@ class CartPole(SymbtoolsEnv):
         self.p.g = g
 
 
-        super(CartPole, self).__init__(mod_file, self.p, time_step, init_state,
+        super(CartPole, self).__init__(mod_file, self.p, time_step,
+                                       init_state=init_state,
                                        goal_state=goal_state,
                                        state_cost=state_cost,
                                        control_cost=control_cost,
@@ -118,8 +119,8 @@ class CartPole(SymbtoolsEnv):
 
         if self.state is None: return None
 
-        time = self.trajectory['time'][-1]
-        self.label.text = '{0:.2f} s'.format(time)
+        #time = self.trajectory['time'][-1][0]
+        #self.label.text = '{0:.2f} s'.format(time)
         th, pos = self.state[0:2]
 
         cartx = pos * scale + screen_width / 2.0  # MIDDLE OF CART
@@ -170,6 +171,7 @@ def modeling():
     return mod
 
 if __name__ == '__main__':
+    modeling()
     init_state = np.array([-0.5*np.pi, 0.5, 0., 0.])
     env = CartPole(init_state=init_state)
     #vid = VideoRecorder(env, 'recording/video.mp4')
