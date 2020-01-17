@@ -41,16 +41,6 @@ class StateSpaceEnv(gym.Env):
         self.state_space = spaces.Box(-state_bounds, state_bounds)
         self.control_space = spaces.Box(-control_bounds, control_bounds)
 
-        # test ODEs output using the inital state and zero as input
-        assert(ode(0, init_state, np.zeros(control_dim)).shape == (state_dim,))
-
-        # ODE error term
-        if ode_error is not None:
-            assert(ode_error(0, init_state, np.zeros(control_dim)).shape == (state_dim,))
-            self.ode = lambda t, state, control: ode(t, state, control) + ode_error(t, state, control)
-        else:
-            self.ode = ode
-
         if not isinstance(time_step, float):
             raise TypeError("'time_step' has to be a float")
         self.time_step = time_step
@@ -72,6 +62,16 @@ class StateSpaceEnv(gym.Env):
             else:
                 raise AssertionError("'goal_state' has to be an array with shape '(state_dim,)'")
 
+        # test ODEs output using the inital state and zero as input
+        assert (ode(0, init_state, np.zeros(control_dim)).shape == (state_dim,))
+        self.ode = ode
+
+        # ODE error term
+        if ode_error is not None:
+            self.set_ode_error(ode_error)
+        else:
+            self.rhs = ode
+
         # init state variables
         self.old_state = None
         self.state = init_state
@@ -83,7 +83,7 @@ class StateSpaceEnv(gym.Env):
         self.seed()
 
         # initialize trajectory (time_steps, state/control dim)
-        self.trajectory = {'time': np.array([0]), 'states': np.stack([init_state]), 'controls': None}
+        self.trajectory = {'time': np.array([[0]]), 'states': np.stack([init_state]), 'controls': None}
 
         self.viewer = None
 
@@ -199,7 +199,7 @@ class StateSpaceEnv(gym.Env):
         Returns:
             state (ndarray): State after simulation
         """
-        sol = solve_ivp(lambda t, state: self.ode(t, state, control), (0, self.time_step), self.state, t_eval=[self.time_step])
+        sol = solve_ivp(lambda t, state: self.rhs(t, state, control), (0, self.time_step), self.state, t_eval=[self.time_step])
         state = sol.y.ravel()
         return state
 
@@ -279,6 +279,11 @@ class StateSpaceEnv(gym.Env):
     def _done(self):
         return not self.state_space.contains(self.state)
 
+    def set_ode_error(self, ode_error):
+        assert(ode_error(0, self.init_state, np.zeros(self.control_dim)).shape == (self.state_dim,))
+        self.ode_error = ode_error
+        self.rhs = lambda t, state, control: self.ode(t, state, control) + self.ode_error(t, state, control)
+        pass
 
 class SymbtoolsEnv(StateSpaceEnv):
     def __init__(self, mod_file, params, time_step,
