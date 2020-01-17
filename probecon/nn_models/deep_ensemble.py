@@ -125,7 +125,7 @@ class DeepEnsemble(nn.Module):
         mean, variance, sigma2_mod = self.forward(x)
         return torch.exp(-alpha*sigma2_mod)*mean
 
-    def training(self, x, y, batchsize, epochs, loss='nll', lr=1e-3, weight_decay=1e-5):
+    def train_ensemble(self, dataset, epochs, loss='nll', lr=1e-3, weight_decay=1e-5):
         """ Training process. """
 
         # initialize optimizers
@@ -135,33 +135,36 @@ class DeepEnsemble(nn.Module):
 
         for epoch in range(epochs):
             # shuffle data
-            shuffle_idx = torch.randperm(x.__len__())
-            for xb, yb in zip(x[shuffle_idx].split(batchsize), y[shuffle_idx].split(batchsize)):
-                losses = self._train_ensemble(xb, yb, loss)
+            for (xb, yb) in dataset.get_batches():
+                losses = self._train_ensemble_step(xb, yb, loss)
             if epoch == 0:
-                print('inital loss: ', np.mean(np.array(losses)))
+                print('inital loss: ', np.mean(losses))
+            else:
+                print('epoch ',epoch,  ' loss: ', np.mean(losses))
         print('final loss: ', np.mean(np.array(losses)))
 
 
 
-    def _train_ensemble(self, x, y, loss):
+    def _train_ensemble_step(self, x, y, loss_fnc):
         """ One training step of gradient descent on the whole deep ensemble """
-
+        losses = []
         for i in range(self.num_models):
             model = getattr(self, 'model_' + str(i))
-            self._train_submodel(x, y, model, loss)
+            loss = self._train_submodel_step(x, y, model, loss_fnc)
+            losses.append(loss)
+        return np.array(losses)
 
 
-    def _train_submodel(self, x, y, model, loss):
+    def _train_submodel_step(self, x, y, model, loss_fnc):
         """ One training step of gradient descent on an individual submodel of the deep ensemble """
 
         # todo: check if requires_grad = True is necessary
         x.requires_grad = True
         model.optimizer.zero_grad()
         mean, var = model(x)
-        if loss == 'nll':
+        if loss_fnc == 'nll':
             loss = NLLloss(y, mean, var)
-        if loss == 'mse':
+        if loss_fnc == 'mse':
             loss = nn.MSELoss(y, mean)
         loss.backward()
         if self.adversarial:  # adversarial training
@@ -173,6 +176,51 @@ class DeepEnsemble(nn.Module):
         model.optimizer.step()
         x.requires_grad = False
         return loss.item()
+
+    def export_model(self, file):
+        raise NotImplementedError
+
+    def import_model(self, file):
+        raise NotImplementedError
+
+class StateSpaceDeepEnsemble(DeepEnsemble):
+    def __init__(self, state_dim, control_dim, num_models,
+                 second_order=False,
+                 hidden_layers=[32, 32, 32],
+                 activation='relu',
+                 std_max=None,
+                 adversarial=False,
+                 eps=0.001,
+                 alpha=300):
+        self.second_order = second_order
+        self.state_dim = state_dim
+        self.control_dim = control_dim
+        self.alpha = alpha
+        if second_order and state_dim % 2 == 0:
+            output_dim = int(state_dim/2)
+        else:
+            output_dim = state_dim
+
+        super(StateSpaceDeepEnsemble, self).__init__(num_models=num_models,
+                                                     inputs=state_dim+control_dim,
+                                                     outputs=output_dim,
+                                                     hidden_layers=hidden_layers,
+                                                     activation=activation,
+                                                     std_max=std_max,
+                                                     adversarial=adversarial,
+                                                     eps=eps)
+
+    def ode(self, t, state, control):
+        state_t = torch.tensor(state, dtype=torch.float32)
+        control_t = torch.tensor(control, dtype=torch.float32)
+        dx = self.weighted_forward(torch.cat((state_t, control_t)).reshape(1, self.inputs), self.alpha)
+        dx = dx.detach().numpy()[0]
+        if self.second_order:
+            return np.concatenate([state[self.outputs:], dx])
+        else:
+            return dx
+
+
 
 
 def NLLloss(y, mean, var):
