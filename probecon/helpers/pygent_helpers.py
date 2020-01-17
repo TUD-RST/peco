@@ -5,7 +5,7 @@ class PygentEnvWrapper(StateSpaceModel):
 
     def __init__(self, environment):
         uDim = environment.control_dim
-        ode = environment.ode
+        ode = environment.rhs
         cost = self.eval_cost
         x0 = environment.init_state
         dt = environment.time_step
