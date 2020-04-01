@@ -4,26 +4,91 @@ from torch.utils.data import Dataset, DataLoader
 from probecon.system_models.cart_pole import CartPole
 
 class TrajectoryDataSet(Dataset):
-        def __init__(self, file=None):
-            if file is not None:
-                with open(file, 'rb') as open_file:
-                    self.trajectories = pickle.load(open_file)
-            else:
-                self.trajectories = []
+    """
+    Data set for trajectories
+    """
+    def __init__(self, file=None):
+        """
 
-        def __len__(self):
-            return self.trajectories.__len__()
+        Args:
+            file (str):
+                filename and path
+        """
+        if file is not None:
+            with open(file, 'rb') as open_file:
+                self.trajectories = pickle.load(open_file)
+        else:
+            self.trajectories = []
 
-        def __getitem__(self, item):
-            return self.trajectories[item]
+    def __len__(self):
+        return self.trajectories.__len__()
 
-        def add_trajectory(self, trajectory):
-            self.trajectories.append(trajectory)
+    def __getitem__(self, item):
+        """
+        Returns a the trajectory with index 'item'
+
+        Args:
+            item (int):
+                index of the trajectory that should be returned
+
+        Returns:
+            trajectory (dict):
+                trajectory dictionary with the keys: 'old_states', 'controls', 'states', 'time' and 'time_steps'
+
+        """
+        trajectory = self.trajectories[item]
+        return trajectory
+
+    def add_trajectory(self, trajectory):
+        """
+        Add trajectory to the data set
+
+        Args:
+            trajectory (dict):
+                trajectory dictionary with the keys: 'old_states', 'controls', 'states', 'time' and 'time_steps'
+        """
+        self.trajectories.append(trajectory)
 
 
 
 class TransitionDataSet(Dataset):
-    def __init__(self, state_dim, control_dim, file=None, data_set=None, batch_size=1, shuffle=False, type='continuous', ode=None, second_order=True):
+    """
+    Data set for transitions of dynamical systems. Can be used to train dynamics models.
+    """
+    def __init__(self, state_dim, control_dim,
+                 file=None,
+                 data_set=None,
+                 batch_size=1,
+                 shuffle=False,
+                 type='continuous',
+                 state_eq=None,
+                 second_order=False):
+        """
+
+        Args:
+            state_dim (int):
+                state dimension
+            control_dim (int):
+                control input dimension
+            file (str):
+                file to load
+            data_set (probecon.data.dataset.TrajectoryDataSet, probecon.data.dataset.TransitionDataSet):
+                data set that is loaded
+            batch_size (int):
+                batch size for training
+            shuffle (bool):
+                if 'True', data is reshuffled at every epoch
+            type (str):
+                'continuous':
+                    for training an ODE
+                'discrete':
+                    for training a difference equation
+            state_eq (function):
+                state equation which can be an ODE or a difference equation of the form 'state_eq(state, control)'
+            second_order (bool):
+                if 'True', only
+
+        """
         if file is not None:
             with open(file, 'rb') as open_file:
                 self.trajectories = pickle.load(open_file)
@@ -40,8 +105,10 @@ class TransitionDataSet(Dataset):
         self.type = type
         self.batch_size = batch_size
         self.shuffle = shuffle
-        if ode is not None:
-            self.ode = ode
+        if state_eq is not None:
+            self.state_eq = state_eq
+        else:
+            raise ValueError
         self.state_dim = state_dim
         self.control_dim = control_dim
         if second_order and state_dim % 2 == 0:
@@ -61,10 +128,26 @@ class TransitionDataSet(Dataset):
         return old_state, control, state, time, time_step
 
     def save_to_file(self, file):
+        """
+        Save data set to file
+
+        Args:
+            file (str):
+                file name and path
+
+        """
         with open(file, 'wb') as open_file:
             pickle.dump(open_file, self.trajectories)
+        pass
 
     def add_trajectory(self, trajectory):
+        """
+        Add trajectory to the data set
+
+        Args:
+            trajectory (dict):
+                trajectory dictionary with the keys: 'old_states', 'controls', 'states', 'time' and 'time_steps'
+        """
         self.trajectories.append(trajectory)
         old_states = torch.tensor(trajectory['states'][:-1], dtype=torch.float32)
         controls = torch.tensor(trajectory['controls'], dtype=torch.float32)
@@ -86,6 +169,21 @@ class TransitionDataSet(Dataset):
         pass
 
     def add_transition(self, old_state, control, state, time, time_step):
+        """
+        Add a state transition to the data set.
+        Args:
+            old_state (numpy.ndarray):
+                previous state of the environment
+            control (numpy.ndarray):
+                control input applied to the environment
+            state (numpy.ndarray):
+                state
+            time (float):
+                time when the transition happened
+            time_step (float):
+                time diffrence between 'old_state' and 'state'
+
+        """
         old_state = torch.tensor(old_state)
         control = torch.tensor(control)
         state = torch.tensor(state)
@@ -94,37 +192,103 @@ class TransitionDataSet(Dataset):
         self.transitions['states'] = torch.cat((self.transitions['states'], state))
         self.transitions['time'] = torch.cat((self.transitions['time'], time))
         self.transitions['time_steps'] = torch.cat((self.transitions['time_steps'], time_step))
+        pass
 
     def get_training_sample_continuous(self, item):
+        """
+        Create a training sample consisting of state, control and approximate state derivative
+
+        Args:
+            item (int):
+                index of the training sample in the data set
+
+        Returns:
+            old_state (numpy.ndarray):
+                state of the environment before applying the control input
+            control (numpy.ndarray):
+                control input
+            state_diff (numpy.ndarray):
+                approximate state derivative using an Euler forward scheme
+
+        """
         old_state, control, state, time, time_step = self.__getitem__(item)
-        rhs = (state-old_state)/time_step # right-hand side approximation of the ODE using Euler scheme
-        return old_state, control, rhs
+        state_diff = (state-old_state)/time_step # right-hand side approximation of the ODE using Euler scheme
+        return old_state, control, state_diff
 
     def get_training_sample_discrete(self, item):
+        """
+        Create a training sample consisting of state, control and approximated state derivative
+
+        Args:
+            item (int):
+                index of the training sample in the data set
+
+        Returns:
+            old_state (numpy.ndarray):
+                state of the environment before applying the control input
+            control (numpy.ndarray):
+                control input applied to the environment
+            state (numpy.ndarray):
+                state of the environment before applying the control input
+
+        """
         old_state, control, state, time, time_step = self.__getitem__(item)
         return old_state, control, state
 
     def get_batches(self):
+        """
+        Create batches from the data set
+
+        Returns:
+            batches (list):
+                list of batches that contain a tuple (x, y), where x is the neural network input and y is the training target
+
+        """
         if self.type=='continuous':
-                return [(torch.cat((old_state, control), 1),
-                         ((state - old_state) / time_step
-                          - self.batch_ode(old_state, control))[:, self.state_dim-self.output_dim:])
-                        for old_state, control, state, time, time_step in self.dataloader()]
+                batches = [(torch.cat((old_state, control), 1),
+                            ((state - old_state) / time_step
+                             - self.batch_state_eq(old_state, control))[:, self.state_dim-self.output_dim:])
+                           for old_state, control, state, time, time_step in self.data_loader()]
+
         elif self.type=='discrete':
-                return [(torch.cat((old_state, control), 1),
-                         (state - old_state
-                          - time_step*self.batch_ode(old_state, control))[:, self.state_dim - self.output_dim:])
-                        for old_state, control, state, time, time_step in self.dataloader()]
+                batches = [(torch.cat((old_state, control), 1),
+                            (state - old_state
+                             - time_step*self.batch_state_eq(old_state, control))[:, self.state_dim-self.output_dim:])
+                           for old_state, control, state, time, time_step in self.data_loader()]
         else:
             raise ValueError
+        return batches
 
-    def batch_ode(self, states, controls):
-        rhs = torch.tensor([self.ode(0, state, control) for (state, control) in zip(states, controls)],
-                           dtype=torch.float32)
-        return rhs
+    def batch_state_eq(self, states, controls):
+        """
+        Create a batch of state equation outputs
 
-    def dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, shuffle=self.shuffle)
+        Args:
+            states (numpy.ndarray):
+                batch of states
+            controls (numpy.ndarray):
+                batch of control inputs
+
+        Returns:
+            y (torch.Tensor):
+                batch of outputs of the state equation
+
+        """
+        y = torch.tensor([self.state_eq(state, control) for (state, control) in zip(states, controls)],
+                         dtype=torch.float32)
+        return y
+
+    def data_loader(self):
+        """
+        Creates a the DataLoader object for iterating over the data set
+
+        Returns:
+            loader (torch.utils.data.DataLoader):
+                provides an iterable over the data set
+
+        """
+        loader = DataLoader(self, batch_size=self.batch_size, shuffle=self.shuffle)
+        return loader
 
 
 if __name__ == '__main__':

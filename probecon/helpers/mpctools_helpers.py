@@ -1,4 +1,3 @@
-from probecon.system_models.core import SymbtoolsEnv
 from probecon.system_models.cart_pole import CartPole
 import casadi as ca
 import numpy as np
@@ -6,7 +5,10 @@ import rstmpctools as rstmpc
 from rstmpctools.mpc import MPCSolver
 from rstmpctools.ocp import OptimalControlProblem
 
-class MPCToolsEnvWrapper(object):
+class MPCToolsWrapper(object):
+    """
+    Class that wraps a mpc solver from 'rstmpctools' to
+    """
     def __init__(self, environment, sim_time, mpc_horizon=None):
         self.environment = environment
         self.sim_time = sim_time
@@ -63,6 +65,13 @@ class MPCToolsEnvWrapper(object):
         self._create_solver()
 
     def _create_ocp(self):
+        """
+        Setup the optimal control problem.
+
+        Returns:
+            self.ocp (rstmpctools.opc.OptimalControlProblem)
+
+        """
         mode = 'custom'
 
         sys = self.mpctools_env
@@ -100,6 +109,14 @@ class MPCToolsEnvWrapper(object):
         return self.ocp
 
     def _create_solver(self):
+        """
+        Setup the solver for the optimal control problem.
+
+        Returns:
+            self.solver (rstmpctools.ocp.MPCSolver):
+                Solver of the optimal control problem
+
+        """
         # Specify keyword arguments of MPCSolver constructor.
         if self.mpc_horizon is None:
             receding = 'global'
@@ -119,18 +136,42 @@ class MPCToolsEnvWrapper(object):
         return self.solver
 
     def solve(self):
-        """ Solves the optimal control problem. """
+        """
+        Solve the trajectory optimization problem.
+
+        Returns:
+            sol (dict):
+                solution dictionary containing:
+                    'x_sim': optimal state trajectory
+                    'u_sim': optimal control trajectory
+                    'J_f': final cost of the trajectory
+                    todo: these are not all entries
+
+        """
         sol = self.solver.solve()
         return sol
 
     def plot(self):
-        """ Plot the optimal state and control trajectories. """
+        """
+        Plot the optimal state and control trajectories.
+        """
         self.solver._plot()
         pass
 
 
 def SympyToCasadi(string):
-    """ Converts a string of a Sympy expression (no module prefix) to CasADi. """
+    """
+    Converts 'cos' and 'sin' in a string of a Sympy expression (no module prefix) to a CasADi expression.
+
+    Args:
+        string (str):
+            string that contains a SymPy expression
+
+    Returns:
+        string (str):
+            string that contains the converted CasADi expression
+
+    """
 
     string = string.replace('cos', 'ca.cos')
     string = string.replace('sin', 'ca.sin')
@@ -139,7 +180,7 @@ def SympyToCasadi(string):
 if __name__ == '__main__':
     env = CartPole()
     sim_time = 3.
-    mpc_ocp = MPCToolsEnvWrapper(env, sim_time)
+    mpc_ocp = MPCToolsWrapper(env, sim_time)
     sol = mpc_ocp.solve()
     mpc_ocp.plot()
     print(sol['sol_status'])

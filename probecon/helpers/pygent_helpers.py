@@ -1,9 +1,23 @@
 from pygent.environments import StateSpaceModel
 
 class PygentEnvWrapper(StateSpaceModel):
-    """ Wrapping StateSpaceEnv environment """
+    """
+    Class of a 'pygent' wrapper for  the StateSpaceEnv class
+
+    This enables to use the algorithms (DDPG, NFQ, iLQR and MBRL) of
+
+    https://github.com/tud-rst/pygent
+
+    """
 
     def __init__(self, environment):
+        """
+
+        Args:
+            environment (probecon.StateSpaceEnv):
+                environment object that should be wrapped
+        """
+
         uDim = environment.control_dim
         ode = environment.rhs
         cost = self.eval_cost
@@ -19,6 +33,16 @@ class PygentEnvWrapper(StateSpaceModel):
 
 
     def terminate(self, x):
+        """
+        Determines if the state 'x' is terminal
+
+        Args:
+            x (numpy.ndarrray):
+
+        Returns:
+            True if 'x' is terminal
+
+        """
         return False
 
     def animation(self):
