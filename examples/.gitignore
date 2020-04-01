@@ -3,3 +3,5 @@ dist
 .idea
 venv
 Pygent.egg-info
+sols
+recording
