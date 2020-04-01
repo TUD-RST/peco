@@ -84,9 +84,9 @@ class TransitionDataSet(Dataset):
                 'discrete':
                     for training a difference equation
             state_eq (function):
-                state equation which can be an ODE or a difference equation of the form 'state_eq(state, control)'
+                state equation which has to be an ODE of the form 'state_eq(time=0., state, control)'
             second_order (bool):
-                if 'True', only
+                if 'True', only half of the model is learned
 
         """
         if file is not None:
@@ -274,7 +274,7 @@ class TransitionDataSet(Dataset):
                 batch of outputs of the state equation
 
         """
-        y = torch.tensor([self.state_eq(state, control) for (state, control) in zip(states, controls)],
+        y = torch.tensor([self.state_eq(0., state, control) for (state, control) in zip(states, controls)],
                          dtype=torch.float32)
         return y
 

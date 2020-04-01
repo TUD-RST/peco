@@ -280,10 +280,11 @@ class StateSpaceModelDeepEnsemble(DeepEnsemble):
                                                           hidden_layers=hidden_layers,
                                                           activation=activation,
                                                           std_max=std_max,
+                                                          sparse=sparse,
                                                           adversarial=adversarial,
                                                           eps=eps)
 
-    def state_equation(self, state, control):
+    def state_eq(self, state, control):
         """
         State equation that can be used to model an ODE or difference equation.
 
@@ -294,17 +295,19 @@ class StateSpaceModelDeepEnsemble(DeepEnsemble):
                 control input vector
 
         Returns:
-            y (numpy.ndarray):
-                output of the state equation
+            mean (torch.Tensor):
+                mean of the model for the given input '(state, control)'
+            variance (torch.Tensor):
+                variance of the model for the given input '(state, control)'
+            var_mean (torch.Tensor)
+                variance of the mean of the individual sub-models (measure for epistemic uncertainty)
 
         """
         state_t = torch.tensor(state, dtype=torch.float32)
         control_t = torch.tensor(control, dtype=torch.float32)
-        mean, var, var_mean = self.forward(torch.cat((state_t, control_t)).reshape(1, self.inputs))
-        y = mean.detach().numpy()[0]
-        if self.second_order:
-            y = np.concatenate([state[self.outputs:], y])
-        return y
+        mean, variance, var_mean = self.forward(torch.cat((state_t, control_t)).reshape(1, self.inputs))
+
+        return mean, variance, var_mean
 
     def ode(self, t, state, control):
         """
@@ -323,7 +326,10 @@ class StateSpaceModelDeepEnsemble(DeepEnsemble):
                 output of the ODE
 
         """
-        y = self.state_equation(state, control)
+        mean, var, var_mean = self.state_eq(state, control)
+        y = mean.detach().numpy()[0]
+        if self.second_order:
+            y = np.concatenate([state[self.outputs:], y])
         return y
 
 
