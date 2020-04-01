@@ -24,3 +24,4 @@ path = '../../results/ilqr/cart_pole/' # path, where results are saved
 
 algorithm = iLQR(env, t, dt, path=path, constrained=True) # instance of the iLQR algorithm
 algorithm.run_optim() # run trajectory optimization
+env.plot()

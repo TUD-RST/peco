@@ -1,9 +1,9 @@
 import torch
 import numpy as np
-from probecon.nn_models.deep_ensemble import StateSpaceDeepEnsemble
+
+from probecon.nn_models.deep_ensemble import StateSpaceModelDeepEnsemble
 from probecon.data.dataset import TransitionDataSet
 from probecon.control.trajectory_optimization import TrajectoryOptimization
-from probecon.system_models.cart_pole import CartPole
 from probecon.system_models.pendulum import Pendulum
 
 class DiscrepancyLearner(object):
@@ -17,7 +17,7 @@ class DiscrepancyLearner(object):
         self.model_environment = model_environment
         state_dim = self.model_environment.state_dim
         control_dim = self.model_environment.control_dim
-        self.deep_ensemble = StateSpaceDeepEnsemble(num_models=5,
+        self.deep_ensemble = StateSpaceModelDeepEnsemble(num_models=5,
                                                     hidden_layers=[32, 32, 32],
                                                     state_dim=state_dim,
                                                     control_dim=control_dim,

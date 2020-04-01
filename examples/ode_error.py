@@ -4,7 +4,8 @@ from probecon.system_models.cart_pole import CartPole
 import matplotlib.pyplot as plt
 def ode_error(t, state, control):
     return np.array([np.sin(state[0]), 0., 0., -0.05*control[0]])
-
+    # Todo:
+    # realistisches Problem -> Fehlerterm in den Geschwindigkeitskomponenten
 
 def c_k(x, u):
     x2, x1, x4, x3 = x
