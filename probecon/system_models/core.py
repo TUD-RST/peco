@@ -6,18 +6,12 @@ import numpy as np
 import sympy as sp
 from scipy.integrate import solve_ivp
 import pickle
-import symbtools as st
 import matplotlib.pyplot as plt
 
-class StateSpaceEnv(gym.Env):
-    """State-space environment.
 
-    state_dim (int): dimension of the state space
-    control_dim(int): dimension of the control input space
-    ode (function): ODE, right hand sight of the differential equation
-    init_state (ndarray): initial state
-    state_bounds (ndarray): box constraints of the state space
-    control_bound (ndarray): box constraints of the control input space
+class StateSpaceEnv(gym.Env):
+    """
+    Class for a state-space model environment, that is compatible with OpenAI's Gym.
 
     """
     def __init__(self, state_dim, control_dim, ode, time_step, init_state,
@@ -27,9 +21,25 @@ class StateSpaceEnv(gym.Env):
                  cost_function=None,
                  state_bounds=None,
                  control_bounds=None,
-                 ode_error=None,
-                 noise=None):
+                 ode_error=None):
+        """
+        Args:
+            state_dim (int):
+                dimension of the state space
+            control_dim(int):
+                dimension of the control input space
+            ode (function):
+                ODE, right hand side of the differential equation
+            init_state (numpy.ndarray):
+                initial state
+            state_bounds (numpy.ndarray):
+                box constraints of the state space
+            control_bounds (numpy.ndarray):
+                box constraints of the control input space
+            ode_error (function):
+                ODE error, additional termi in right hand side
 
+        """
         self.state_dim = state_dim
         self.control_dim = control_dim
         # create spaces
@@ -55,7 +65,7 @@ class StateSpaceEnv(gym.Env):
         # goal state
         if isinstance(goal_state, type(None)):
             # default goal state is the zero vector
-            self.goal_state = 0*init_state
+            self.goal_state = np.zeros(state_dim)
         else:
             if goal_state.shape == (state_dim, ):
                 self.goal_state = goal_state
@@ -78,7 +88,7 @@ class StateSpaceEnv(gym.Env):
 
         # initialize cost
         self._cost_init(state_cost, control_cost)
-        
+
         # seeding
         self.seed()
 
@@ -97,19 +107,25 @@ class StateSpaceEnv(gym.Env):
             self._eval_cost = cost_function
 
     def step(self, control):
-        """ Take one step in the environment. Forward simulation.
+        """
+        Take one step in the environment (forward simulation).
 
-               Args:
-                   state (ndarray): State vector with shape (state_dim, )
-                   control (ndarray): Control input vector with shape (control_dim, )
+        Args:
+            control (numpy.ndarray):
+                control input vector with shape (control_dim, )
 
-               Returns:
-                   state (ndarray): New state after taking the step
-                   reward (float): Reward (-cost) for taking the step
-                   done (bool):
+        Returns:
+            state (numpy.ndarray):
+                new state after taking the step
+            reward (float):
+                reward (-cost) for taking the step
+            done (bool):
+                True, if terminal state is reached
+            info (dict):
+                empty dict for additional info
 
-               """
-        if control.shape != (self.control_dim,):
+        """
+        if control.shape != (self.control_dim, ):
             raise AssertionError("'control' has to be an array with shape '(control_dim,)'")
         self.old_state = self.state
         self.state = self._simulation(control)
@@ -128,10 +144,11 @@ class StateSpaceEnv(gym.Env):
         return state, reward, done, info
 
     def reset(self):
-        """ Reset the environment to it's initial state and delete the trajectory.
+        """
+        Reset the environment to it's initial state and delete the trajectory.
 
         Returns:
-            state (ndarray): current state of the system
+            state (numpy.ndarray): current state of the system
 
         """
         self._set_state(self.init_state)
@@ -139,38 +156,66 @@ class StateSpaceEnv(gym.Env):
 
 
     def render(self):
-        """ gym.Env method for rendering. """
+        """
+        gym.Env method for rendering.
+
+        """
         raise NotImplementedError
 
     def close(self):
+        """
+        Closes the Gym render viewer.
+
+        """
         if self.viewer:
             self.viewer.close()
             self.viewer = None
         pass
 
     def seed(self, seed=None):
+        """
+        Seed the environment
+        Args:
+            seed (int):
+                seed value
+
+        Returns:
+            [seed] (list):
+                seed value
+
+        """
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def plot(self):
+        """
+        Creates a plot of the state and control trajectories.
+
+        Returns:
+            fig (matplotlib.figure.Figure)
+
+        """
         time = self.trajectory['time']
         states = self.trajectory['states']
         controls = self.trajectory['controls']
-        plt.subplot(211)
-        plt.plot(time, states)
-        plt.legend([r'$x_'+str(i+1)+'$' for i in range(self.state_dim)])
-        plt.subplot(212)
-        plt.plot(time[:-1], controls)
-        plt.legend([r'$u_' + str(i+1) + '$' for i in range(self.control_dim)])
-        plt.xlabel(r't[s]')
-        pass
+        fig, axes = plt.subplots(2)
+        axes[0].plot(time, states)
+        axes[0].legend([r'$x_'+str(i+1)+'$' for i in range(self.state_dim)], loc='upper right')
+        axes[0].grid(True)
+        axes[1].plot(time[:-1], controls)
+        axes[1].legend([r'$u_' + str(i+1) + '$' for i in range(self.control_dim)], loc='upper right')
+        axes[1].set_xlabel(r't [s]')
+        axes[1].grid(True)
+        return fig
 
     def save_trajectory(self, filename, path):
-        """ Saves the current trajectory to a pickle file.
+        """ Saves the current trajectory to a pickle file
 
         Args:
-            filename (string): Saving filename
-            path (string): Saving path
+            filename (str):
+                name of the trajectory to be saved
+            path (str):
+                path of the trajectory to be saved
 
         """
         with open(path + filename + '.p', 'w') as open_file:
@@ -178,10 +223,12 @@ class StateSpaceEnv(gym.Env):
         pass
 
     def _set_state(self, state):
-        """ Deletes the trajectory and sets the environments state to 'state'.
+        """
+        Deletes the trajectory and sets the environments state to 'state'
 
         Args:
-            state (ndarray): State
+            state (numpy.ndarray):
+                state the environment is reset to
 
         """
         self.old_state = None
@@ -191,27 +238,28 @@ class StateSpaceEnv(gym.Env):
         pass
 
     def _simulation(self, control):
-        """Simulation of the environment for one time step starting in the current state.
+        """
+        Simulation of the environment for one time-step starting in the current state
 
         Args:
-            control (ndarray): Control input
+            control (numpy.ndarray): Control input
 
         Returns:
-            state (ndarray): State after simulation
+            state (numpy.ndarray): State after simulation
         """
         sol = solve_ivp(lambda t, state: self.rhs(t, state, control), (0, self.time_step), self.state, t_eval=[self.time_step])
         state = sol.y.ravel()
         return state
 
     def _cost_init(self, state_cost, control_cost):
-        """ Initialization of the cost.
+        """
+        Initialization of the cost function
 
-                Args:
-                    state_cost (ndarray): Cost of the state
-                    control_cost (ndarray): Cost of the control
+        Args:
+            state_cost (numpy.ndarray): Cost of the state
+            control_cost (numpy.ndarray): Cost of the control
 
-                """
-        # terms of a quadratic cost
+        """
         if state_cost is None:
             self.state_cost = np.diag(np.ones(self.state_dim))
         else:
@@ -233,14 +281,16 @@ class StateSpaceEnv(gym.Env):
         pass
 
     def _eval_cost(self, state, control):
-        """ Quadratic cost function.
+        """
+        Quadratic cost function
 
         Args:
-            state (ndarray): State vector with shape (state_dim, )
-            control (ndarray): Control input vector with shape (control_dim, )
+            state (numpy.ndarray): State vector with shape (state_dim, )
+            control (numpy.ndarray): Control input vector with shape (control_dim, )
 
         Returns:
-            cost (float): Cost
+            cost (float):
+                stage cost of the transition
 
         """
         state_diff = state-self.goal_state
@@ -250,16 +300,16 @@ class StateSpaceEnv(gym.Env):
         return cost
 
     def _append_transition(self, state, control):
-        """ Save transition in trajectory.
+        """
+        Append a transtion to the trajectory
 
-               Args:
-                   state (ndarray): State vector with shape (state_dim, )
-                   control (ndarray): Control input vector with shape (control_dim, )
+        Args:
+            state (numpy.ndarray):
+                state vector with shape (state_dim, )
+            control (numpy.ndarray):
+                control input vector with shape (control_dim, )
 
-               Returns:
-                   cost (float): Cost
-
-               """
+        """
         # append state
         states = self.trajectory['states']
         self.trajectory['states'] = np.concatenate((states, state.reshape(1, self.state_dim)))
@@ -277,15 +327,35 @@ class StateSpaceEnv(gym.Env):
         pass
 
     def _done(self):
-        return not self.state_space.contains(self.state)
+        """
+        Determines if the current state is out of bounds
+
+        Returns:
+            done (bool):
+                True, if state is out of bounds
+
+        """
+        done = not self.state_space.contains(self.state)
+        return done
 
     def set_ode_error(self, ode_error):
+        """
+        Setting an error term in the environments ODE to model unknown dynamics
+        Args:
+            ode_error (function):
+                function that describes the error term of the environments ODE
+
+        """
         assert(ode_error(0, self.init_state, np.zeros(self.control_dim)).shape == (self.state_dim,))
         self.ode_error = ode_error
         self.rhs = lambda t, state, control: self.ode(t, state, control) + self.ode_error(t, state, control)
         pass
 
 class SymbtoolsEnv(StateSpaceEnv):
+    """
+    Class for mechanical systems (environments), that were derived with the symbtools module.
+
+    """
     def __init__(self, mod_file, params, time_step,
                  init_state=None,
                  goal_state=None,
@@ -296,6 +366,34 @@ class SymbtoolsEnv(StateSpaceEnv):
                  control_bounds=None,
                  part_lin=False,
                  ode_error=None):
+        """
+        Args:
+            mod_file (str):
+                filename of the pickle file, where the model container was dumped into
+            params (dict):
+                system parameters
+            time_step (float):
+                duration of one time-step
+            init_state:
+                initial state of the environment
+            goal_state (numpy.ndarray):
+                goal state of the environment
+            state_cost (numpy.ndarray):
+                cost of the state vector
+            control_cost (numpy.ndarray):
+                cost of the control vector
+            cost_function (function):
+                explicit cost function (for example a non-quadratic or exponential cost)
+            state_bounds (numpy.ndarray):
+                box constraints of the state space
+            control_bounds (numpy.ndarray):
+                box constraints of the control input space
+            part_lin (bool):
+                True, if the partial-linearized form of the dynamics should be used
+            ode_error (function):
+                ODE error, additional termi in right hand side
+
+        """
 
         # parameters:
         self.p = params
@@ -338,11 +436,20 @@ class SymbtoolsEnv(StateSpaceEnv):
                                            control_bounds=control_bounds,
                                            ode_error=ode_error)
 
-
     def _params_vals(self):
-        return list(self.p.__dict__.values())
+        """
+        Determine the parameter values of the system for evaluation in the system dynamics
 
+        Returns:
+            params_vals (list):
+                list of parameter values
+
+        """
+        params_vals = list(self.p.__dict__.values())
+        return params_vals
 
 class Parameters(object):
-    "Container Class for parameters."
-    pass
+    """
+    Container class for parameters
+
+    """
