@@ -10,12 +10,18 @@ from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 class CartTriplePole(SymbtoolsEnv):
-    def __init__(self, time_step=0.03, init_state=np.zeros(8),
+    """
+    Class that implements a cart-triple-pole environment
+
+    """
+    def __init__(self,
+                 time_step=0.03,
+                 init_state=np.zeros(8),
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
                  state_bounds=np.array([2*pi, 2*pi, 2*pi, 1., inf, inf, inf, inf]),
-                 control_bounds=np.array([15.]),
+                 control_bounds=np.array([40.]),
                  mod_file='cart_triple_pole.p',
                  part_lin=True,
                  m0=3.34,
@@ -36,6 +42,67 @@ class CartTriplePole(SymbtoolsEnv):
                  d2=1.9497e-06,
                  d3=0.00164642,
                  g=9.81):
+        """
+
+                Args:
+                    time_step (float):
+                        duration of one time-step
+                    init_state:
+                        initial state of the environment
+                    goal_state (numpy.ndarray):
+                        goal state of the environment
+                    state_cost (numpy.ndarray):
+                        cost of the state vector
+                    control_cost (numpy.ndarray):
+                        cost of the control vector
+                    cost_function (function):
+                        explicit cost function (for example a non-quadratic or exponential cost)
+                    state_bounds (numpy.ndarray):
+                        box constraints of the state space
+                    control_bounds (numpy.ndarray):
+                        box constraints of the control input space
+                    mod_file (string):
+                        filename of the pickle file, where the model container was dumped into
+                    part_lin (bool):
+                        True, if the partial-linearized form of the dynamics should be used
+                    m0 (float):
+                        mass of the cart in kg
+                    m1 (float):
+                        mass of the first pole in kg
+                    m2 (float):
+                        mass of the second pole in kg
+                    m3 (float):
+                        mass of the third pole in kg
+                    J1 (float):
+                        rotational moment of inertia of the first pole in kg*m^2
+                    J2 (float):
+                        rotational moment of inertia of the second pole in kg*m^2
+                    J3 (float):
+                        rotational moment of inertia of the third pole in kg*m^2
+                    a1 (float):
+                        position of the center of mass of the first pole in m
+                    a2 (float):
+                        position of the center of mass of the second pole in m
+                    a3 (float):
+                        position of the center of mass of the third pole in m
+                    l1 (float):
+                        length of the first pole in m
+                    l2 (float):
+                        length of the second pole in m
+                    l3 (float):
+                        length of the third pole in m
+                    d0 (float):
+                        damping coefficient of the cart in N*m*s
+                    d1 (float):
+                        damping coefficient of the first pole in N*m*s
+                    d2 (float):
+                        damping coefficient of the second pole in N*m*s
+                    d3 (float):
+                        damping coefficient of the third pole in N*m*s
+                    g (float):
+                        gravity in m/s^2
+
+                """
 
         # parameters:
         self.p = Parameters()
@@ -92,10 +159,12 @@ class CartTriplePole(SymbtoolsEnv):
             self.track_end_left = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
             l, r, t, b = track_right, track_right + polewidth, carty + polewidth, carty - polewidth
             self.track_end_right = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
-            self.track.set_color(0, 0, 0)
+            l, r, t, b = 0.498 * screen_width, .502 * screen_width, carty + 0.5 * polewidth, carty - 0.5 * polewidth
+            self.track_middle = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
             self.viewer.add_geom(self.track)
             self.viewer.add_geom(self.track_end_left)
             self.viewer.add_geom(self.track_end_right)
+            self.viewer.add_geom(self.track_middle)
 
             # add cart
             l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
@@ -105,6 +174,15 @@ class CartTriplePole(SymbtoolsEnv):
             cart.add_attr(self.carttrans)
             cart.set_color(.4, .4, .4)
             self.viewer.add_geom(cart)
+
+            # add bar to visualize control input
+            l, r, t, b = [0., 0., 0., 0.]
+            bar = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+            bar.set_color(1., 0., 0.)
+            self.bartrans = rendering.Transform(translation=(0., -cartheight / 2))
+            bar.add_attr(self.bartrans)
+            bar.add_attr(self.carttrans)
+            self.viewer.add_geom(bar)
 
             # add pole1
             l, r, t, b = -polewidth / 2, polewidth / 2, pole1len - polewidth / 2, -polewidth / 2
@@ -171,7 +249,7 @@ class CartTriplePole(SymbtoolsEnv):
 
         if self.state is None: return None
 
-        time = self.trajectory['time'][-1]
+        time = self.trajectory['time'][-1][0]
         self.label.text = '{0:.2f} s'.format(time)
         th1, th2, th3, pos = self.state[0:4]
 
@@ -180,6 +258,13 @@ class CartTriplePole(SymbtoolsEnv):
         self.pole1trans.set_rotation(th1)
         self.pole2trans.set_rotation(th2 - th1)
         self.pole3trans.set_rotation(th3 - th2)
+
+        control = self.trajectory['controls'][-1] / self.control_space.high * scale * 0.5
+        if control < np.zeros(1):
+            l, r, t, b = control, 0., 0., -0.05 * scale
+        else:
+            l, r, t, b = 0., control, 0., -0.05 * scale
+        self.viewer.geoms[5].v = [(l, b), (l, t), (r, t), (r, b)]
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
 def modeling():

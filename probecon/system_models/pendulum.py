@@ -10,13 +10,19 @@ from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 class Pendulum(SymbtoolsEnv):
-    def __init__(self, time_step=0.01, init_state=np.zeros(2),
+    """
+    Class that implements an inverted pendulum environment
+
+    """
+    def __init__(self,
+                 time_step=0.01,
+                 init_state=np.zeros(2),
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
                  cost_function=None,
                  state_bounds=np.array([2*pi, inf]),
-                 control_bounds=np.array([1.]),
+                 control_bounds=np.array([3.]),
                  mod_file='pendulum.p',
                  ode_error=None,
                  m0=0.3583,
@@ -25,6 +31,42 @@ class Pendulum(SymbtoolsEnv):
                  a0=0.43,
                  g=9.81,
                  d0=0.006588):
+        """
+
+         Args:
+             time_step (float):
+                 duration of one time-step
+             init_state (numpy.ndarray):
+                 initial state of the environment
+             goal_state (numpy.ndarray):
+                 goal state of the environment
+             state_cost (numpy.ndarray):
+                 cost of the state vector
+             control_cost (numpy.ndarray):
+                 cost of the control vector
+             cost_function (function):
+                 explicit cost function (for example a non-quadratic or exponential cost)
+             state_bounds (numpy.ndarray):
+                 box constraints of the state space
+             control_bounds (numpy.ndarray):
+                 box constraints of the control input space
+             mod_file (str):
+                 filename of the pickle file, where the model container was dumped into
+             part_lin (bool):
+                 True, if the partial-linearized form of the dynamics should be used
+             m0 (float):
+                 mass of the pole in kg
+             J0 (float):
+                 rotational moment of inertia of the pole in kg*m^2
+             a0 (float):
+                 position of the center of mass of the pole in m
+             l0 (float):
+                 length of the first pole in m
+             d0 (float):
+                 damping coefficient of the pole in N*m*s
+             g (float):
+                 gravity in m/s^2
+         """
 
         # parameters:
         self.p = Parameters()
@@ -32,8 +74,8 @@ class Pendulum(SymbtoolsEnv):
         self.p.J0 = J0
         self.p.a0 = a0
         self.p.l0 = l0
-        self.p.g = g
         self.p.d0 = d0
+        self.p.g = g
 
         super(Pendulum, self).__init__(mod_file, self.p, time_step,
                                        init_state=init_state,
@@ -46,6 +88,20 @@ class Pendulum(SymbtoolsEnv):
                                        ode_error=ode_error)
 
     def render(self, mode='human'):
+        """
+        Renders the inverted pendulum systems current state with OpenGL
+
+        Args:
+            mode (string):
+                'human':
+                    normal render mode
+                'rgb_array':
+                    render mode for learning from image data
+
+        Returns:
+            True if mode='human' and rgb-array if mode='rgb_array'
+
+        """
         screen_width = 400
 
         world_width = 2.5*self.p.l0
@@ -73,6 +129,20 @@ class Pendulum(SymbtoolsEnv):
             axle.set_color(.2, .2, .2)
             self.viewer.add_geom(axle)
 
+            # add torque arrow
+            circle = rendering.make_polyline([])
+            self.circle_trans = rendering.Transform(translation=(screen_width / 2, screen_height / 2))
+            circle.add_attr(self.circle_trans)
+            circle.set_linewidth(5)
+            circle.set_color(1., 0.0, 0.0)
+            self.viewer.add_geom(circle)
+
+            arrow = rendering.FilledPolygon([])
+            self.arrow_trans = rendering.Transform(translation=(screen_width / 2, screen_height / 2))
+            arrow.add_attr(self.arrow_trans)
+            arrow.set_color(1., 0.0, 0.0)
+            self.viewer.add_geom(arrow)
+
             # add time label
             self.label = pyglet.text.Label('',
                                            font_name='Times New Roman',
@@ -89,13 +159,71 @@ class Pendulum(SymbtoolsEnv):
 
         th = self.state[0]
         self.poletrans.set_rotation(th)
+
+        circle = self.viewer.geoms[2]
+        arrow = self.viewer.geoms[3]
+
+        # normalized control input
+        control = self.trajectory['controls'][-1] / self.control_space.high
+        self._arrow_render(arrow, circle, scale, control)
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
+    def _arrow_render(self, arrow, circle, scale, input):
+        """
+        Determines the points of the arrow for rendering.
 
+        Args:
+            arrow (gym.envs.classic_control.rendering.FilledPolygon):
+                arrow tip
+            circle (gym.envs.classic_control.rendering.FilledPolygon):
+                circle segment
+            scale (int):
+                scale of the render determined in self.render()
+            input (float):
+                normalized control input in the range of [-1., 1.]
+
+        Returns:
+
+        """
+        assert (np.abs(input) <= 1.) # check if input is in range [-1., 1.]
+
+        # set radius of the circle
+        radius = 0.1*scale
+
+        # determine the segment of the circle
+        if input < 0.0:
+            min_angle = -np.pi
+            max_angle = 0.
+        else:
+            min_angle = np.pi
+            max_angle = 0.
+
+        # scale the segment according to the input
+        max_angle = max_angle - (1. - np.abs(input))*(max_angle - min_angle)
+
+        # set the points of the circle segment
+        circle.v = [(radius*np.sin(a), radius*np.cos(a)) for a in np.linspace(min_angle, max_angle, 50)]
+
+        # determine the points of the arrow_tip
+        arrow_head_in = (0.7*radius * np.sin(max_angle), 0.7*radius*np.cos(max_angle))
+        arrow_head_out = (1.3*radius * np.sin(max_angle), 1.3*radius*np.cos(max_angle))
+        arrow_head_tip = (1.1*radius*np.sin(max_angle-np.sign(input)*0.5),
+                          1.1*radius*np.cos(max_angle-np.sign(input)*0.5))
+        # set the points of the arrow tip
+        arrow.v = [arrow_head_in, arrow_head_tip, arrow_head_out, arrow_head_in]
+        pass
 
 def modeling():
-    params = sp.symbols('m0, J0, a0, l0, g, d0') # system parameters
-    m0, J0, a0, l0, g, d0 = params
+    """
+    Derivation of the equations of motion for the inverted pendulum system
+
+    Returns:
+        mod (symbtools.modeltools.SymbolicModel):
+            contains the equations of motion and other system properties
+
+    """
+    params = sp.symbols('m0, J0, a0, l0, d0, g') # system parameters
+    m0, J0, a0, l0, d0, g = params
 
     # force
     tau = sp.Symbol('tau')

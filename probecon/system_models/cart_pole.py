@@ -3,15 +3,21 @@ import symbtools as st
 import numpy as np
 import pyglet
 import pickle
+import matplotlib.pyplot as plt
 
 from numpy import pi, inf
 from gym.wrappers.monitoring.video_recorder import VideoRecorder
+
 from probecon.system_models.core import SymbtoolsEnv, Parameters
 from probecon.helpers.gym_helpers import DrawText
 from probecon.helpers.symbtools_helpers import create_save_model
 
 
 class CartPole(SymbtoolsEnv):
+    """
+    Class that implements a cart-pole environment
+
+    """
     def __init__(self, time_step=0.01, init_state=np.array([pi, 0., 0., 0.]),
                  goal_state=None,
                  state_cost=np.array([5., 10., 0.01, 0.01]),
@@ -30,6 +36,46 @@ class CartPole(SymbtoolsEnv):
                  d0=0.1,
                  d1=0.006588,
                  g=9.81):
+        """
+
+        Args:
+            time_step (float):
+                duration of one time-step
+            init_state (numpy.ndarray):
+                initial state of the environment
+            goal_state (numpy.ndarray):
+                goal state of the environment
+            state_cost (numpy.ndarray):
+                cost of the state vector
+            control_cost (numpy.ndarray):
+                cost of the control vector
+            cost_function (function):
+                explicit cost function (for example a non-quadratic or exponential cost)
+            state_bounds (numpy.ndarray):
+                box constraints of the state space
+            control_bounds (numpy.ndarray):
+                box constraints of the control input space
+            mod_file (string):
+                filename of the pickle file, where the model container was dumped into
+            part_lin (bool):
+                True, if the partial-linearized form of the dynamics should be used
+            m0 (float):
+                mass of the cart in kg
+            m1 (float):
+                mass of the first pole in kg
+            J1 (float):
+                rotational moment of inertia of the first pole in kg*m^2
+            a1 (float):
+                position of the center of mass of the first pole in m
+            l1 (float):
+                length of the first pole in m
+            d0 (float):
+                damping coefficient of the cart in N*m*s
+            d1 (float):
+                damping coefficient of the first pole in N*m*s
+            g (float):
+                gravity in m/s^2
+        """
 
         # parameters:
         self.p = Parameters()
@@ -55,6 +101,20 @@ class CartPole(SymbtoolsEnv):
                                        ode_error=ode_error)
 
     def render(self, mode='human'):
+        """
+        Renders the cart-pole systems current state with OpenGL
+
+        Args:
+            mode (string):
+                'human':
+                    normal render mode
+                'rgb_array':
+                    render mode for learning from image data
+
+        Returns:
+            True if mode='human' and rgb-array if mode='rgb_array'
+
+        """
         screen_width = 800
 
         world_width = (self.state_space.high[1]+self.p.l1) * 2
@@ -70,18 +130,20 @@ class CartPole(SymbtoolsEnv):
             from gym.envs.classic_control import rendering
             self.viewer = rendering.Viewer(screen_width, screen_height)
             # add track
-            track_left = polelen - 0.5*cartwidth
-            track_right = screen_width - polelen + 0.5*cartwidth
+            track_left = polelen - 0.5 * cartwidth
+            track_right = screen_width - polelen + 0.5 * cartwidth
             self.track = rendering.Line((track_left, carty), (track_right, carty))
             self.track.linewidth.stroke = 3
             l, r, t, b = track_left - polewidth, track_left, carty + polewidth, carty - polewidth
             self.track_end_left = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
             l, r, t, b = track_right, track_right + polewidth, carty + polewidth, carty - polewidth
             self.track_end_right = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
-            self.track.set_color(0, 0, 0)
+            l, r, t, b = 0.498 * screen_width, .502 * screen_width, carty + 0.5 * polewidth, carty - 0.5 * polewidth
+            self.track_middle = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
             self.viewer.add_geom(self.track)
             self.viewer.add_geom(self.track_end_left)
             self.viewer.add_geom(self.track_end_right)
+            self.viewer.add_geom(self.track_middle)
 
             # add cart
             l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
@@ -91,6 +153,15 @@ class CartPole(SymbtoolsEnv):
             cart.add_attr(self.carttrans)
             cart.set_color(.4, .4, .4)
             self.viewer.add_geom(cart)
+
+            # add bar to visualize control input
+            l, r, t, b = [0., 0., 0., 0.]
+            bar = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+            bar.set_color(1., 0., 0.)
+            self.bartrans = rendering.Transform(translation=(0., -cartheight/2))
+            bar.add_attr(self.bartrans)
+            bar.add_attr(self.carttrans)
+            self.viewer.add_geom(bar)
 
             # add pole
             l, r, t, b = -polewidth / 2, polewidth / 2, polelen - polewidth / 2, -polewidth / 2
@@ -119,17 +190,31 @@ class CartPole(SymbtoolsEnv):
 
         if self.state is None: return None
 
-        #time = self.trajectory['time'][-1][0]
-        #self.label.text = '{0:.2f} s'.format(time)
+        time = self.trajectory['time'][-1][0]
+        self.label.text = '{0:.2f} s'.format(time)
         th, pos = self.state[0:2]
 
         cartx = pos * scale + screen_width / 2.0  # MIDDLE OF CART
         self.carttrans.set_translation(cartx, carty)
         self.poletrans.set_rotation(th)
 
+        control = self.trajectory['controls'][-1]/self.control_space.high*scale*0.5
+        if control < np.zeros(1):
+            l, r, t, b = control, 0., 0., -0.05*scale
+        else:
+            l, r, t, b = 0., control, 0., -0.05*scale
+        self.viewer.geoms[5].v = [(l, b), (l, t), (r, t), (r, b)]
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
 def modeling():
+    """
+    Derivation of the equations of motion for the cart-pole system
+
+    Returns:
+        mod (symbtools.modeltools.SymbolicModel):
+            contains the equations of motion and other system properties
+
+    """
     params = sp.symbols('m0, m1, J1, a1, l1, d0, d1, g') # system parameters
     m0, m1, J1, a1, l1, d0, d1, g = params
 
@@ -163,7 +248,7 @@ def modeling():
     R = (d0*dq0**2 + d1*dq1**2)*0.5
 
     # generalized forces
-    Q = [0, F]
+    Q = sp.Matrix([0, F])
 
     # Lagrange equations of the second kind
     # d/dt(dL/d(dq_i/dt)) - dL/dq_i + dR/d(dq_i/dt)= Q_i
@@ -174,11 +259,11 @@ if __name__ == '__main__':
     modeling()
     init_state = np.array([-0.5*np.pi, 0.5, 0., 0.])
     env = CartPole(init_state=init_state)
-    #vid = VideoRecorder(env, 'recording/video.mp4')
+    vid = VideoRecorder(env, 'recording/video.mp4')
     env.reset()
-    for i in range(1000):
+    for i in range(500):
         env.random_step()
         env.render()
         #vid.capture_frame()
-    env.close()
     #vid.close()
+    env.close()
