@@ -57,6 +57,8 @@ class TrajectoryOptimization(object):
 
         """
         if self.algorithm == 'ilqr':
+            self.ocp.reset()
+            self.ocp.environment.reset(self.ocp.environment.x0)
             self.ocp.run_optim()
             sol = {'x_sim':self.ocp.xx, 'u_sim': self.ocp.uu, 'J_f': self.ocp.cost,
                    'k': self.ocp.kk,
