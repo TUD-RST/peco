@@ -22,7 +22,8 @@ class DeepEnsemble(nn.Module):
                  sparse=False,
                  std_max=None,
                  adversarial=False,
-                 eps=0.001):
+                 eps=0.001,
+                 writer=None):
         """
 
         Args:
@@ -46,6 +47,8 @@ class DeepEnsemble(nn.Module):
                 if 'True', adverserial training is performed
             eps (float):
                 parameter for adverserial training
+            writer (torch.utils.tensorboard.SummaryWriter):
+
         """
         super(DeepEnsemble, self).__init__()
         self.num_models = num_models
@@ -55,6 +58,8 @@ class DeepEnsemble(nn.Module):
         self.activation = activation
         self.adversarial = adversarial
         self.eps = eps # epsilon in adversarial training
+        self.writer = writer
+
         for i in range(self.num_models):
             model = GaussianMLP(inputs=self.inputs,
                                 outputs=self.outputs,
@@ -83,21 +88,21 @@ class DeepEnsemble(nn.Module):
         """
 
         means = []
-        stds = []
+        vars = []
         for i in range(self.num_models):
             model = getattr(self, 'model_' + str(i))
-            mean, std = model(x)
+            mean, var = model(x)
             means.append(mean)
-            stds.append(std)
+            vars.append(var)
         means = torch.stack(means)
         mean = means.mean(dim=0)
-        stds = torch.stack(stds)
-        mean_var = stds.pow(2).mean(dim=0) # mean of the variances
+        vars = torch.stack(vars)
+        mean_var = vars.mean(dim=0) # mean of the variances
         var_mean = means.pow(2).mean(dim=0) - mean.pow(2)  # variance of means
         variance = mean_var + var_mean # total variance of the model
         return mean, variance, var_mean
 
-    def train_ensemble(self, dataset, epochs, loss='nll', lr=1e-3, weight_decay=1e-5):
+    def train(self, dataset, epochs, loss='nll', lr=1e-3, weight_decay=1e-5):
         """
         Train the ensemble model.
 
@@ -125,10 +130,11 @@ class DeepEnsemble(nn.Module):
             # shuffle data
             for (xb, yb) in dataset.get_batches():
                 losses = self._train_ensemble_step(xb, yb, loss)
+
             if epoch == 0:
                 print('inital loss: ', np.mean(losses))
             else:
-                print('epoch ',epoch,  ' loss: ', np.mean(losses))
+                print('epoch ', epoch,  ' loss: ', np.mean(losses))
         print('final loss: ', np.mean(np.array(losses)))
         pass
 
@@ -185,11 +191,11 @@ class DeepEnsemble(nn.Module):
         # todo: check if requires_grad = True is necessary
         x.requires_grad = True
         model.optimizer.zero_grad()
-        mean, var = model(x)
+        mean, var  = model(x)
         if loss_fnc == 'nll':
             loss = NLLloss(y, mean, var)
         elif loss_fnc == 'mse':
-            loss = nn.MSELoss(y, mean)
+            loss = nn.functional.mse_loss(y, mean)
         loss.backward()
 
         # adversarial training
@@ -239,7 +245,8 @@ class StateSpaceModelDeepEnsemble(DeepEnsemble):
                  std_max=None,
                  sparse=False,
                  adversarial=False,
-                 eps=0.001):
+                 eps=0.01,
+                 writer=None):
         """
 
         Args:
@@ -265,6 +272,7 @@ class StateSpaceModelDeepEnsemble(DeepEnsemble):
                 if 'True', adverserial training is performed
             eps (float):
                 parameter for adverserial training
+            writer todo: add doc
         """
         self.second_order = second_order
         self.state_dim = state_dim
@@ -282,7 +290,8 @@ class StateSpaceModelDeepEnsemble(DeepEnsemble):
                                                           std_max=std_max,
                                                           sparse=sparse,
                                                           adversarial=adversarial,
-                                                          eps=eps)
+                                                          eps=eps,
+                                                          writer=writer)
 
     def state_eq(self, state, control):
         """

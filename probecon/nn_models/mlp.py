@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from probecon.helpers.nn_helpers import swish
+from probecon.helpers.nn_helpers import Swish
 
 class MLP(nn.Module):
     """
@@ -42,7 +42,7 @@ class MLP(nn.Module):
         elif activation == 'sigmoid':
             self.act = torch.sigmoid
         elif activation == 'swish':
-            self.act = swish
+            self.act = Swish()
         else:
             assert ('Use "relu","tanh", "sigmoid" or "swish" as activation.')
         # create linear layers y = Wx + b
@@ -185,9 +185,9 @@ class GaussianMLP(nn.Module):
         if self.std_max is not None:
             std = (self.std_max*torch.sigmoid(std))
         else:
-            std = F.softplus(std) # ensure the 'std' is positive
-        std += 1e-6 # add a small value for numerical stability
-        return mean, std
+            std = F.softplus(std) + 1e-6 # ensure the 'std' is positive
+        var = std.pow(2)
+        return mean, var
 
 
 if __name__ == '__main__':
