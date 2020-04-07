@@ -22,7 +22,7 @@ class DeepEnsemble(nn.Module):
                  sparse=False,
                  std_max=None,
                  adversarial=False,
-                 eps=0.001,
+                 eps=0.01,
                  writer=None):
         """
 
@@ -80,27 +80,23 @@ class DeepEnsemble(nn.Module):
         Returns:
             mean (torch.Tensor):
                 mean of the model for the given input 'x'
-            variance (torch.Tensor):
-                variance of the model for the given input 'x'
-            var_mean (torch.Tensor)
-                variance of the mean of the individual sub-models (measure for epistemic uncertainty)
+            std (torch.Tensor):
+                standard deviation of the model for the given input 'x'
+            std_mean (torch.Tensor)
+                standard deviation of the mean tensor of the individual sub-models (measure for epistemic uncertainty)
 
         """
 
-        means = []
-        vars = []
-        for i in range(self.num_models):
-            model = getattr(self, 'model_' + str(i))
-            mean, var = model(x)
-            means.append(mean)
-            vars.append(var)
-        means = torch.stack(means)
+        means, stds = self._forward_submodels(x)
         mean = means.mean(dim=0)
-        vars = torch.stack(vars)
+        vars = stds.pow(2)
         mean_var = vars.mean(dim=0) # mean of the variances
-        var_mean = means.pow(2).mean(dim=0) - mean.pow(2)  # variance of means
+        var_mean = means.var(dim=0)  # variance of means
         variance = mean_var + var_mean # total variance of the model
-        return mean, variance, var_mean
+        std = torch.sqrt(variance)
+        std_mean = torch.sqrt(var_mean)
+        return mean, std, std_mean
+
 
     def train(self, dataset, epochs, loss='nll', lr=1e-3, weight_decay=1e-5):
         """
@@ -132,13 +128,39 @@ class DeepEnsemble(nn.Module):
                 losses = self._train_ensemble_step(xb, yb, loss)
 
             if epoch == 0:
-                print('inital loss: ', np.mean(losses))
+                print('inital loss {:6.5f}'.format(np.mean(losses)))
             else:
-                print('epoch ', epoch,  ' loss: ', np.mean(losses))
-        print('final loss: ', np.mean(np.array(losses)))
+                print('epoch: {:6} | loss: {:6.5f} | loss (std): {:6.5f}'.format(epoch, np.mean(losses), np.std(losses)))
+        print('Final loss {:6.5f}'.format(np.mean(losses)))
         pass
 
+    def _forward_submodels(self, x):
+        """
+        Forward pass through all submodels
+        Args:
+            x (torch.Tensor):
+                input tensor,
+                shape = (batch size, inputs)
 
+        Returns:
+            means (torch.Tensor):
+                tensor containing the mean outputs of the submodels,
+                shape = (num_models, batch size, outputs)
+            stds (torch.Tensor):
+                tensor containing the standard deviation outputs of the submodels,
+                shape = (num_models, batch size, outputs)
+
+        """
+        means = []
+        stds = []
+        for i in range(self.num_models):
+            model = getattr(self, 'model_' + str(i))
+            mean, std = model(x)
+            means.append(mean)
+            stds.append(std)
+        means = torch.stack(means)
+        stds = torch.stack(stds)
+        return means, stds
 
     def _train_ensemble_step(self, x, y, loss_fnc):
         """
@@ -191,9 +213,9 @@ class DeepEnsemble(nn.Module):
         # todo: check if requires_grad = True is necessary
         x.requires_grad = True
         model.optimizer.zero_grad()
-        mean, var  = model(x)
+        mean, std  = model(x)
         if loss_fnc == 'nll':
-            loss = NLLloss(y, mean, var)
+            loss = NLLloss(y, mean, std.pow(2))
         elif loss_fnc == 'mse':
             loss = nn.functional.mse_loss(y, mean)
         loss.backward()
@@ -201,15 +223,18 @@ class DeepEnsemble(nn.Module):
         # adversarial training
         if self.adversarial:
             x_prime = x + self.eps * torch.sign(x.grad)  # create adversarial examples
-            mean, var = model(x)
-            mean_prime, var_prime = model(x_prime) # adversarial
-            loss = NLLloss(y, mean, var) + NLLloss(y, mean_prime, var_prime) # combined loss
+            mean, std = model(x)
+            mean_prime, std_prime = model(x_prime) # adversarial
+            loss = NLLloss(y, mean, std.pow(2)) + NLLloss(y, mean_prime, std_prime.pow(2)) # combined loss
             loss.backward() # perform backprop
 
         # perform one step of gradient descent
         model.optimizer.step()
         x.requires_grad = False
         return loss.item()
+
+    def test_loss(self):
+        raise NotImplementedError
 
     def export_model(self, file):
         raise NotImplementedError

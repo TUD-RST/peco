@@ -1,4 +1,7 @@
+import math
 import torch
+import torch.nn as nn
+
 from torch.nn.parameter import Parameter
 
 def NLLloss(y, mean, var):
@@ -26,13 +29,37 @@ def NLLloss(y, mean, var):
     else:
         sigma = torch.stack([torch.diag(v) for v in var]) # calc sigmas^-1 shape = [B, inputs, inputs]
         sigma_det = torch.stack([torch.det(s) for s in sigma])
+        # since sigma is a diagonal matrix 1/sigma = simga^-1
         diff = y - mean
-        quad = torch.bmm(diff.view(batch_size, inputs ,1), diff.view(batch_size, 1, inputs))*sigma.inverse() # trace argument
-        exp = torch.stack([torch.trace(q) for q in quad]) # compute trace
-        loss = (torch.log(sigma_det) + exp).mean()
+        # diff*diff.T*simga^-1
+        quad = torch.bmm(diff.view(batch_size, inputs ,1), diff.view(batch_size, 1, inputs))*sigma.inverse()# trace argument
+        # trace(diff*diff.T*sigma^-1)
+        trace = torch.stack([torch.trace(q) for q in quad]) # compute trace
+        loss = (torch.log(sigma_det) + trace).mean()
     return loss
 
-def swish(x, beta=0.01, trainable=True):
+class Swish(nn.Module):
+    """
+    Class that implements the 'swish' activation function:
+
+        f(x) = x*sigmoid(beta*x)
+
+    https://arxiv.org/pdf/1710.05941.pdf
+    """
+    def __init__(self, beta=1.0, trainable=True):
+        super(Swish, self).__init__()
+        if trainable:
+            self.beta = Parameter(torch.tensor(0.1))
+            self.beta.requiresGrad = True
+        else:
+            self.beta = beta
+
+
+    def forward(self, input):
+        return swish_function(input, beta=self.beta)
+
+
+def swish_function(input, beta=1.0):
     """
     Swish activation function, f(x) = x*sigmoid(beta*x), (beta - scalar) 
 
@@ -40,9 +67,9 @@ def swish(x, beta=0.01, trainable=True):
 
     
     Args:
-        x (torch.Tensor):
+        input(torch.Tensor):
             input vector
-        beta (float): 
+        beta (float, torch.nn.parameter.Parameter):
             constant or trainable parameter
         trainable (bool):
             if 'True', 'beta' is a trainable parameter
@@ -53,7 +80,7 @@ def swish(x, beta=0.01, trainable=True):
             output of the swish activation function
 
     """
-    if trainable:
-        beta = Parameter(torch.Tensor(1, 1))
-    y = x*torch.sigmoid(beta*x)
+    y = input*torch.sigmoid(beta*input)
     return y
+
+

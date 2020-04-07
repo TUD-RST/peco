@@ -186,8 +186,7 @@ class GaussianMLP(nn.Module):
             std = (self.std_max*torch.sigmoid(std))
         else:
             std = F.softplus(std) + 1e-6 # ensure the 'std' is positive
-        var = std.pow(2)
-        return mean, var
+        return mean, std
 
 
 if __name__ == '__main__':
