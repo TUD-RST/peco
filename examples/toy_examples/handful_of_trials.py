@@ -51,7 +51,7 @@ plt.show()
 # train ensemble model
 epochs = 40
 ensemble = DeepEnsemble(num_models=5, hidden_layers=[30, 30, 30], activation='swish', adversarial=True)
-ensemble.train(data, epochs, loss='nll', lr=5e-3, weight_decay=1e-5)
+ensemble.train_ensemble(data, epochs, loss_fnc='nll', lr=5e-3, weight_decay=1e-5)
 
 # plot submodels output
 plt.plot(xx.numpy(),yy.numpy(),'xg', label='data points', markersize=3, alpha=0.3)
@@ -62,8 +62,8 @@ for i in range(ensemble.num_models):
     std = stds[i].detach().numpy()
     mean_plot = plt.plot(x, mean, label='GNN (NLL) '+str(i+1))
     color = mean_plot[0].get_color()
-    plt.fill_between(x.reshape(100,), (mean-3*std).reshape(100,), (mean+3*std).reshape(100,),alpha=0.2, color=color)
-    plt.fill_between(x.reshape(100,), (mean-std).reshape(100,), (mean+std).reshape(100,),alpha=0.3, color=color)
+    plt.fill_between(x.reshape(100,), (mean-3*std).reshape(100,), (mean+3*std).reshape(100,), alpha=0.2, color=color)
+    plt.fill_between(x.reshape(100,), (mean-std).reshape(100,), (mean+std).reshape(100,), alpha=0.3, color=color)
 plt.title('Outputs of the networks in the ensemble')
 plt.xlabel('x')
 plt.ylabel('y')

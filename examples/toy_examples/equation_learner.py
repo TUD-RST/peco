@@ -44,11 +44,11 @@ plt.show()
 # train ensemble model
 epochs = 40
 ensemble = DeepEnsemble(num_models=5, inputs=2, outputs=1, hidden_layers=[20, 20, 20, 20], activation='swish', adversarial=False)
-ensemble.train(data, epochs, loss='nll', lr=1e-3, weight_decay=1e-4)
+ensemble.train_ensemble(data, epochs, loss_fnc='nll', lr=1e-3, weight_decay=1e-4)
 
 # plot ensemble model output
 plt.plot(x, y, 'k-', label=r'ground truth: $y=\frac{\sin(\pi x_1)}{x^2+1}$')
-x_input = torch.tensor(x@np.ones((1,2)), dtype=torch.float32)
+x_input = torch.tensor(x@np.ones((1, 2)), dtype=torch.float32)
 mean, std, std_mean = ensemble(x_input)
 mean = mean.detach().numpy()
 std = std.detach().numpy()

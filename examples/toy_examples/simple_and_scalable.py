@@ -25,7 +25,7 @@ def data_set(points=20, xrange=(-4, 4), std=3.):
     return xx, yy
 
 xx, yy = data_set(points=20, xrange=(-4, 4), std=3.) # generate data set of 20 samples
-data = SimpleDataSet(xx, yy, batch_size=20, shuffle=True)
+data = SimpleDataSet(xx, yy, batch_size=1, shuffle=True)
 
 # plot data set
 x = np.linspace(-6, 6, 100).reshape(100, 1)
@@ -42,7 +42,7 @@ plt.show()
 # train ensemble model (parameters from the paper)
 epochs = 40
 ensemble = DeepEnsemble(num_models=5, hidden_layers=[100], activation='relu', adversarial=False)
-ensemble.train(data, epochs, loss='nll', lr=0.1, weight_decay=0.)
+ensemble.train_ensemble(data, epochs, loss_fnc='nll', lr=0.1, weight_decay=0.)
 
 
 # plot ensemble model output
@@ -65,11 +65,11 @@ plt.show()
 
 # train ensemble model (own parameters)
 
-data = SimpleDataSet(xx, yy, batch_size=20, shuffle=True)
+data = SimpleDataSet(xx, yy, batch_size=5)
 
-epochs = 1000
-ensemble = DeepEnsemble(num_models=5, hidden_layers=[30, 30, 30], activation='swish', adversarial=True)
-ensemble.train(data, epochs, loss='nll', lr=15e-3, weight_decay=0.0)
+epochs = 500
+ensemble = DeepEnsemble(num_models=5, hidden_layers=[30, 30, 30, 30], activation='swish', adversarial=True)
+ensemble.train_ensemble(data, epochs, loss_fnc='nll', lr=0.01, weight_decay=0.0)
 
 
 # plot ensemble model output
