@@ -3,6 +3,44 @@ import pickle
 from torch.utils.data import Dataset, DataLoader
 from probecon.system_models.cart_pole import CartPole
 
+class SimpleDataSet(Dataset):
+    """
+    Simple data set for input
+    """
+
+    # todo: documentation
+    def __init__(self, input, target, batch_size=1, shuffle=True):
+        self.input = input
+        self.target = target
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def __getitem__(self, item):
+        return self.input[item], self.target[item]
+
+    def __len__(self):
+        return self.input.__len__()
+
+    def add_pair(self, x, y):
+        # todo: implement, documentation
+        pass
+
+    def data_loader(self):
+        """
+        Creates a the DataLoader object for iterating over the data set
+
+        Returns:
+            loader (torch.utils.data.DataLoader):
+                provides an iterable over the data set
+
+        """
+        loader = DataLoader(self, batch_size=self.batch_size, shuffle=self.shuffle)
+        return loader
+
+    def get_batches(self):
+        # todo: documentation
+        return [(x, y) for x, y in self.data_loader()]
+
 class TrajectoryDataSet(Dataset):
     """
     Data set for trajectories
@@ -129,7 +167,7 @@ class TransitionDataSet(Dataset):
 
     def save_to_file(self, file):
         """
-        Save data set to file
+        Save data set to file.
 
         Args:
             file (str):
@@ -142,7 +180,7 @@ class TransitionDataSet(Dataset):
 
     def add_trajectory(self, trajectory):
         """
-        Add trajectory to the data set
+        Add trajectory to the data set.
 
         Args:
             trajectory (dict):
@@ -181,7 +219,7 @@ class TransitionDataSet(Dataset):
             time (float):
                 time when the transition happened
             time_step (float):
-                time diffrence between 'old_state' and 'state'
+                time difference between 'old_state' and 'state'
 
         """
         old_state = torch.tensor(old_state)
@@ -237,7 +275,7 @@ class TransitionDataSet(Dataset):
 
     def get_batches(self):
         """
-        Create batches from the data set
+        Create batches from the data set for learning discrepancy models
 
         Returns:
             batches (list):
@@ -289,7 +327,6 @@ class TransitionDataSet(Dataset):
         """
         loader = DataLoader(self, batch_size=self.batch_size, shuffle=self.shuffle)
         return loader
-
 
 if __name__ == '__main__':
     tset = TransitionDataSet()
