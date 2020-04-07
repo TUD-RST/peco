@@ -1,6 +1,7 @@
 import torch
 import numpy as np
-import copy
+
+from torch.utils.tensorboard import SummaryWriter
 
 from probecon.nn_models.deep_ensemble import StateSpaceModelDeepEnsemble
 from probecon.data.dataset import TransitionDataSet
@@ -24,11 +25,13 @@ class DiscrepancyLearner(object):
     def __init__(self, real_environment, model_environment, sim_time,
                  alpha=100.,
                  terminal_cost=None,
-                 init_opt=False,
+                 init_opt=True,
                  render=False,
                  second_order=False,
                  sparse=False,
-                 std_max=None):
+                 std_max=None,
+                 log_dir='./logs/',
+                 exp_name='experiment1'):
         """
 
         Args:
@@ -52,6 +55,10 @@ class DiscrepancyLearner(object):
                 if 'True', for each output dimension a single MLP is used
             std_max (torch.Tensor):
                 maximum values of the standard deviation
+            log_dir (str):
+                the path of the directory where the TensorBoard log files are saved
+            exp_name (str):
+                name of the experiment
 
         """
 
@@ -61,33 +68,41 @@ class DiscrepancyLearner(object):
         self.sim_time = sim_time
         self.alpha = alpha
         self.terminal_cost = terminal_cost
+        self.log_dir = log_dir
+        self.exp_name = exp_name
 
+        self.writer = SummaryWriter(self.log_dir + self.exp_name)
         state_dim = self.model_environment.state_dim
         control_dim = self.model_environment.control_dim
         if std_max is None:
             std_max = torch.zeros(state_dim)
+
         self.deep_ensemble = StateSpaceModelDeepEnsemble(num_models=5,
-                                                        hidden_layers=[30, 30, 30],
-                                                        state_dim=state_dim,
-                                                        control_dim=control_dim,
-                                                        second_order=second_order,
-                                                        sparse=sparse,
-                                                        std_max=std_max)
+                                                         hidden_layers=[32, 32, 32, 32, 32, 32],
+                                                         activation='swish',
+                                                         state_dim=state_dim,
+                                                         control_dim=control_dim,
+                                                         second_order=second_order,
+                                                         sparse=sparse,
+                                                         std_max=std_max,
+                                                         writer = self.writer)
 
         self.traj_opt = TrajectoryOptimization(self.model_environment, self.sim_time, terminal_cost=self.terminal_cost)
-        self.model_environment.set_ode_error(self._discrepancy_model)
+        #self.model_environment.set_ode_error(self._discrepancy_model)
         if init_opt:
             print('Initial trajectory optimization')
-            self._solve_ocp()
-        #self.model_environment.set_ode_error(self._discrepancy_model)
+            # todo: save the optimization result and initialize the planner with it (initial guess)
+            self.opt_control = self._solve_ocp()
+        self.model_environment.set_ode_error(self._discrepancy_model)
         self.dataset = TransitionDataSet(state_dim, control_dim,
-                                         batch_size=512,
+                                         batch_size=8,
                                          shuffle=True,
                                          type='continuous',
                                          state_eq=self.model_environment.ode,
                                          second_order=second_order)
         self.sim_time = sim_time
         self.time_steps = np.arange(0., sim_time+self.model_environment.time_step, self.model_environment.time_step)
+
         pass
 
     def _solve_ocp(self):
@@ -100,21 +115,23 @@ class DiscrepancyLearner(object):
 
         """
 
-        self.model_environment.reset()
+        self.model_environment.reset() # reset model environment to initial state
+        # reinitialize the trajectory optimization algorithm (necessary, because the model has changed)
         self.traj_opt.__init__(self.model_environment, self.sim_time, terminal_cost=self.terminal_cost)
         sol = self.traj_opt.solve()
-        # reset the solver
-        #self.traj_opt = copy.copy(self.traj_opt_init) # todo: implement a reset method
+
         self.opt_control = sol['u_sim']
+        # todo: add the optimal trajectory to the tensorboard writer
 
         # rollout the trajectory on the model
         self.model_environment.reset()
         if self.render:
-            print('Rendering optimized trajectory on the model!')
             for control in self.opt_control:
                 self.model_environment.step(control)
                 self.model_environment.render()
             self.model_environment.close()
+        self.writer.add_figure('model_env', self.model_environment.plot())
+        # todo: add the trajectory and a plot of the trajectory to the tensorboard writer
         return self.opt_control
 
     def _rollout_episode(self, controls):
@@ -136,6 +153,8 @@ class DiscrepancyLearner(object):
             if self.render:
                 self.real_environment.render()
         self.real_environment.close()
+        # todo: add the trajectory and a plot of the trajectory to the tensorboard writer
+        self.writer.add_figure('real_env', self.real_environment.plot())
         return self.real_environment.trajectory
 
     def _rollout_random_episode(self):
@@ -153,6 +172,7 @@ class DiscrepancyLearner(object):
             if self.render:
                 self.real_environment.render()
         self.real_environment.close()
+        self.writer.add_figure('real_env', self.real_environment.plot())
         return self.real_environment.trajectory
 
 
@@ -160,7 +180,7 @@ class DiscrepancyLearner(object):
                                 epochs=60,
                                 loss='nll',
                                 lr=1e-3,
-                                weight_decay=5e-4):
+                                weight_decay=1e-4):
         """
         Train the discrepancy model.
 
@@ -178,7 +198,7 @@ class DiscrepancyLearner(object):
         """
 
         # todo: implement a split between training, test and validation data
-        self.deep_ensemble.train_ensemble(self.dataset, epochs=epochs, loss=loss, lr=lr, weight_decay=weight_decay)
+        self.deep_ensemble.train(self.dataset, epochs=epochs, loss=loss, lr=lr, weight_decay=weight_decay)
         pass
 
     def _discrepancy_model(self, time, state, control):
@@ -231,12 +251,13 @@ class DiscrepancyLearner(object):
                 self.dataset.add_trajectory(trajectory)
             else:
                 # 1) compute control trajectory
-                print('1) Trajectory optimization!')
-                controls = self._solve_ocp() # solve an optimal control problem
+                if epsiode > 1:
+                    print('1) Trajectory optimization!')
+                    self.opt_control = self._solve_ocp() # solve an optimal control problem
 
                 # 2) apply the control trajectory to the system
                 print('2) Rollout!')
-                trajectory = self._rollout_episode(controls)
+                trajectory = self._rollout_episode(self.opt_control)
 
                 # 3) add the resulting trajectory to the data set
                 print('3) Data aggregation!')
@@ -244,7 +265,7 @@ class DiscrepancyLearner(object):
 
                 # 4) train the discrepancy model
                 print('4) Training!')
-                #self._train_discrepancy_model()
+                self._train_discrepancy_model()
         pass
 
 
