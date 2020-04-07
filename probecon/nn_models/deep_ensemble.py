@@ -98,7 +98,7 @@ class DeepEnsemble(nn.Module):
         return mean, std, std_mean
 
 
-    def train(self, dataset, epochs, loss='nll', lr=1e-3, weight_decay=1e-5):
+    def train_ensemble(self, dataset, epochs, loss_fnc='nll', lr=1e-3, weight_decay=1e-5, mode=2):
         """
         Train the ensemble model.
 
@@ -107,13 +107,16 @@ class DeepEnsemble(nn.Module):
                 data set containing the input and target data
             epochs (int):
                 number of epochs
-            loss (str):
+            loss_fnc (str):
                 'nll': training using the negative log-likelihood
                 'mse': training using the mean-squared-error
             lr (float):
                 learning rate for gradient descent
             weight_decay (float):
                 weight-decay for regularization of parameters
+            mode (int):
+                1: sample mini-batch, train all submodels, repeat
+                2: sample data set, train one submodel, repeat (different mini-batches for each submodel)
 
         """
 
@@ -123,16 +126,24 @@ class DeepEnsemble(nn.Module):
             model.optimizer = torch.optim.Adam(params=model.parameters(), lr=lr, weight_decay=weight_decay)
 
         for epoch in range(epochs):
-            # shuffle data
-            for (xb, yb) in dataset.get_batches():
-                losses = self._train_ensemble_step(xb, yb, loss)
-
-            if epoch == 0:
-                print('inital loss {:6.5f}'.format(np.mean(losses)))
-            else:
-                print('epoch: {:6} | loss: {:6.5f} | loss (std): {:6.5f}'.format(epoch, np.mean(losses), np.std(losses)))
-        print('Final loss {:6.5f}'.format(np.mean(losses)))
+            if mode == 1:
+                running_losses = []
+                # train each sub-model on the current mini-batch (xb, yb)
+                for (xb, yb) in dataset.get_batches():
+                    losses = self._train_ensemble_step(xb, yb, loss_fnc)
+                    running_losses.append(losses)
+                running_losses = np.array(running_losses).mean(axis=0)
+            elif mode == 2:
+                running_losses = np.zeros(self.num_models)
+                # train each sub-model on the whole data-set
+                for i in range(self.num_models):
+                    model = getattr(self, 'model_' + str(i))
+                    loss = self._train_submodel(dataset, model, loss_fnc)
+                    running_losses[i] = loss
+            print('epoch: {:6} | loss: {:6.5f} | loss (std): {:6.5f}'.format(epoch, np.mean(running_losses),
+                                                                             np.std(running_losses)))
         pass
+
 
     def _forward_submodels(self, x):
         """
@@ -164,7 +175,7 @@ class DeepEnsemble(nn.Module):
 
     def _train_ensemble_step(self, x, y, loss_fnc):
         """
-        Take one step of gradient descent, when training the deep ensemble.
+        Take one step of gradient descent, when training the deep ensemble. Use the same data for all sub-models.
 
         Args:
             x (torch.Tensor):
@@ -188,6 +199,31 @@ class DeepEnsemble(nn.Module):
         losses = np.array(losses)
         return losses
 
+    def _train_submodel(self, dataset, model, loss_fnc='nll'):
+        """
+        Train a submodel model for one epoch
+
+        Args:
+            dataset (torch.utils.data.DataSet):
+                data set containing the input and target data
+
+            model (probecon.nn_model.mlp.GaussianMLP):
+                sub-model of the ensemble
+            loss (str):
+                'nll': training using the negative log-likelihood
+                'mse': training using the mean-squared-error
+
+        Return:
+            running_loss (float):
+                total loss of the epoch
+
+        """
+
+        running_loss = []
+        for (xb, yb) in dataset.get_batches():
+            loss = self._train_submodel_step(xb, yb, model, loss_fnc)
+            running_loss.append(loss)
+        return np.mean(running_loss)
 
     def _train_submodel_step(self, x, y, model, loss_fnc='nll'):
         """
