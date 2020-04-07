@@ -16,21 +16,21 @@ class Pendulum(SymbtoolsEnv):
     """
     def __init__(self,
                  time_step=0.01,
-                 init_state=np.zeros(2),
+                 init_state=np.array([np.pi, 0.]),
                  goal_state=None,
-                 state_cost=None,
-                 control_cost=None,
+                 state_cost=np.array([1., 0.1]),
+                 control_cost=np.array([1.]),
                  cost_function=None,
                  state_bounds=np.array([2*pi, inf]),
-                 control_bounds=np.array([3.]),
+                 control_bounds=np.array([5.]),
                  mod_file='pendulum.p',
                  ode_error=None,
-                 m0=0.3583,
-                 J0=0.0379999,
-                 l0=0.5,
-                 a0=0.43,
+                 m0=1.0,
+                 J0=1.0,
+                 l0=1.0,
+                 a0=0.5,
                  g=9.81,
-                 d0=0.006588):
+                 d0=0.02):
         """
 
          Args:
