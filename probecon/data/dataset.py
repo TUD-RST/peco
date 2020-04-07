@@ -97,7 +97,7 @@ class TransitionDataSet(Dataset):
                  file=None,
                  data_set=None,
                  batch_size=1,
-                 shuffle=False,
+                 shuffle=True,
                  type='continuous',
                  state_eq=None,
                  second_order=False):
