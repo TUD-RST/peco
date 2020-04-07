@@ -30,8 +30,18 @@ class StateSpaceEnv(gym.Env):
                 dimension of the control input space
             ode (function):
                 ODE, right hand side of the differential equation
+            time_step (float):
+                sampling time
             init_state (numpy.ndarray):
                 initial state
+            goal_state (numpy.ndarray):
+                goal state of the environment
+            state_cost (numpy.ndarray):
+                cost of the state vector
+            control_cost (numpy.ndarray):
+                cost of the control vector
+            cost_function (function):
+                explicit cost function (for example a non-quadratic or exponential cost)
             state_bounds (numpy.ndarray):
                 box constraints of the state space
             control_bounds (numpy.ndarray):
@@ -296,7 +306,7 @@ class StateSpaceEnv(gym.Env):
         state_diff = state-self.goal_state
         state_cost = state_diff@self.state_cost@state_diff
         control_cost = control@self.control_cost@control
-        cost = 0.5*(state_cost + control_cost)
+        cost = 0.5*(state_cost + control_cost)*self.time_step
         return cost
 
     def _append_transition(self, state, control):
