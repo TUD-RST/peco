@@ -13,6 +13,15 @@ def create_save_model(T, V, qq, Q, R, params, file):
     # save model parameters
     mod.params = params
 
+    # compute A and B matrix
+    state_eq = mod.f + mod.g * mod.uu
+    state_eq_part_lin = mod.ff + mod.gg*mod.uu
+
+    mod.ode_state_jac = state_eq.jacobian(mod.xx)
+    mod.ode_state_jac_lin = state_eq_part_lin.jacobian(mod.xx)
+    mod.ode_control_jac = mod.g
+    mod.ode_control_jac_lin = mod.gg
+
     # save model to file
     with open(file, 'wb') as open_file:
         pickle.dump(mod, open_file)
