@@ -138,6 +138,7 @@ class StateSpaceEnv(gym.Env):
         """
         if control.shape != (self.control_dim, ):
             raise AssertionError("'control' has to be an array with shape '(control_dim,)'")
+        control = np.clip(control, self.control_space.low, self.control_space.high)
         self.old_state = self.state
         self.state = self._simulation(control)
         self._append_transition(self.state, control)

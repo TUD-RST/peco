@@ -1,7 +1,10 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from probecon.system_models.pendulum import Pendulum
+import cvxopt as opt
+opt.solvers.options['show_progress'] = False
+
+from probecon.system_models.cart_pole import CartPole
 
 class iLQR(object):
     """
@@ -15,7 +18,10 @@ class iLQR(object):
             
         """
         self.environment = environment
-        self.horizon = horizon
+        if type(horizon) is float:
+            self.horizon = int(horizon/self.environment.time_step)
+        else:
+            self.horizon = horizon
         self.terminal_cost_factor = 100.
         self.max_iterations = 500
         self.zmin = 0.
@@ -30,7 +36,8 @@ class iLQR(object):
         self.mu_d0 = 1.6
         self.alphas = 10**np.linspace(0, -3, 11) # line-search parameters
         self.parallel = True # parallel forward pass (choose best)
-        self.reg_type = 2
+        self.reg_type = 1
+        self.constrained = False # todo: based on environment
 
     def solve(self):
         # initial forward pass
@@ -38,7 +45,6 @@ class iLQR(object):
         for iter in range(self.max_iterations):
             success_backward = False
             success_forward = False
-            success_gradient = False
 
             # backward pass
             while not success_backward:
@@ -46,7 +52,9 @@ class iLQR(object):
                 if not success_backward:
                     print('Backward not successful')
                     self._increase_mu()
-                    break
+                    if self.mu > self.mu_max:
+                        print('mu > mu_max')
+                        break
 
             # check the gradient norm
             g_norm = np.mean(np.max(np.abs(k / (np.abs(controls) + 1)), axis=0))
@@ -68,7 +76,6 @@ class iLQR(object):
                 else:
                     z = np.sign(cost_red)
                     print('non-positive expected reduction')
-                    # self.increase_mu() # todo: probably delete this line, if something's not working!
                 if z > self.zmin:
                     success_forward = True
                     break
@@ -88,7 +95,7 @@ class iLQR(object):
                 self._increase_mu()
                 print('Forward not successfull, mu {}'.format(self.mu))
                 if self.mu > self.mu_max:
-                    print('Diverged: no improvement')
+                    print('mu > mu_max')
                     break
 
         sol = {'states': states, 'controls': controls, 'K': K, 'k': k, 'alpha': alpha, 'cost': cost}
@@ -146,10 +153,10 @@ class iLQR(object):
             qu = cu[i] + vx[i + 1]@B[i]
 
             # regularization
-            Vxx_reg = Vxx[i + 1] + self.mu*np.eye(self.environment.state_dim)*(self.reg_type == 1)
+            Vxx_reg = Vxx[i + 1] + self.mu*np.eye(self.environment.state_dim)*(self.reg_type == 2)
 
             # eq. (10a,10b), paper 1)
-            Quu_reg = Cuu[i] + B[i].T@Vxx_reg@B[i] + self.mu*np.eye(self.environment.control_dim)*(self.reg_type == 2)
+            Quu_reg = Cuu[i] + B[i].T@Vxx_reg@B[i] + self.mu*np.eye(self.environment.control_dim)*(self.reg_type == 1)
             Qux_reg = Cux[i] + B[i].T@Vxx_reg@A[i]
 
             # check if Quu is positive definite
@@ -161,9 +168,33 @@ class iLQR(object):
                 break
 
             # todo: add constraint optimization
-            # controller gains
-            K[i] = -np.linalg.solve(Quu_reg, Qux_reg)  # eq. (10b), paper 1)
-            k[i] = -np.linalg.solve(Quu_reg, qu) # eq. (10c), paper 1)
+            if self.constrained:  # solve QP, eq. (11), paper 2)
+                # convert matrices
+                Quu_opt = opt.matrix(Quu_reg)
+                qu_opt = opt.matrix(qu)
+
+                # inequality constraints Gx <= h, where x is the decision variable
+                G = np.kron(np.array([[1.], [-1.]]), np.eye(self.environment.control_dim))
+                h = np.array([self.environment.control_space.high - controls[i],
+                              -self.environment.control_space.low + controls[i]])
+                G_opt = opt.matrix(G)
+                h_opt = opt.matrix(h)
+                sol = opt.solvers.qp(Quu_opt, qu_opt, G_opt, h_opt)
+                k[i] = np.array(sol['x'])
+
+                clamped = np.zeros((self.environment.control_dim), dtype=bool)
+                # adapted from boxQP.m of iLQG package
+                uplims = np.isclose(k[i], h[:self.environment.control_dim, 0], atol=1e-3)
+                lowlims = np.isclose(k[i], h[self.environment.control_dim:, 0], atol=1e-3)
+
+                clamped[uplims] = True
+                clamped[lowlims] = True
+                free_controls = np.logical_not(clamped)
+                if any(free_controls):
+                    K[i, free_controls, :] = -np.linalg.solve(Quu_reg, Qux_reg)[free_controls, :]
+            else:
+                K[i] = -np.linalg.solve(Quu_reg, Qux_reg)  # eq. (10b), paper 1)
+                k[i] = -np.linalg.solve(Quu_reg, qu) # eq. (10c), paper 1)
 
             # cost-to-go approximation
             Vxx[i] = Qxx + K[i].T@Qux + Qxu@K[i] + K[i].T@Quu@K[i]
@@ -198,13 +229,12 @@ class iLQR(object):
             S_N = S * self.terminal_cost_factor*self.environment.time_step
             R = self.environment.control_cost*self.environment.time_step
             P = np.zeros((self.environment.state_dim, self.environment.control_dim))
-
             Cxx = np.kron(S, np.ones((self.horizon, 1, 1))) # shape (N, state_dim, state_dim)
             Cuu = np.kron(R, np.ones((self.horizon, 1, 1)))  # shape (N, control_dim, control_dim)
             Cxu = np.kron(P, np.ones((self.horizon, 1, 1))) # shape (N, state_dim, control_dim)
             Cux = np.kron(P.T, np.ones((self.horizon, 1, 1))) # shape (N, control_dim, state_dim)
-            cx = np.array([state@S + control@P.T for (state, control) in zip(states, controls)]) # shape (N, state_dim)
-            cu = np.array([state@P + control@R for (state, control) in zip(states, controls)]) # shape (N, control_dim)
+            cx = np.array([(state-self.environment.goal_state)@S + control@P.T for (state, control) in zip(states, controls)]) # shape (N, state_dim)
+            cu = np.array([(state-self.environment.goal_state)@P + control@R for (state, control) in zip(states, controls)]) # shape (N, control_dim)
             Cxx_N = S_N # shape (state_dim, state_dim)
             cx_N = states[-1]@S_N # shape (state_dim, )
             return Cxx, Cuu, Cxu, Cux, cx, cu, Cxx_N, cx_N
@@ -229,8 +259,8 @@ class iLQR(object):
         pass
 
 if __name__=="__main__":
-    env = Pendulum()
-    horizon = 400
+    env = CartPole()
+    horizon = 5.
     algo = iLQR(env, horizon)
     algo.solve()
     env.plot()
