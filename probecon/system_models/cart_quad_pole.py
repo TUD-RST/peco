@@ -381,7 +381,7 @@ def modeling():
     return mod
 
 if __name__ == '__main__':
-    #modeling()
+    modeling()
     # unittest.main()
     init_state = np.array([-0.5*np.pi, -0.5*np.pi, -0.5*np.pi, -0.5*np.pi, 1.5, 0, 0, 0, 0, 0])
     env = CartQuadPole(init_state=init_state)#init_state=np.random.uniform(-1, 1, 8))

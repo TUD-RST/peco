@@ -15,8 +15,8 @@ class CartTriplePole(SymbtoolsEnv):
 
     """
     def __init__(self,
-                 time_step=0.03,
-                 init_state=np.zeros(8),
+                 time_step=0.002,
+                 init_state=np.array([pi, pi, pi, 0., 0., 0., 0., 0.]),
                  goal_state=None,
                  state_cost=None,
                  control_cost=None,
@@ -315,7 +315,7 @@ def modeling():
     return mod
 
 if __name__ == '__main__':
-    #modeling()
+    modeling()
     init_state = np.array([-0.5 * np.pi, -0.5 * np.pi, -0.5 * np.pi, 0.5, 0, 0, 0, 0])
     env = CartTriplePole(init_state=init_state, time_step=0.02)#init_state=np.random.uniform(-1, 1, 8))
     for steps in range(1000):

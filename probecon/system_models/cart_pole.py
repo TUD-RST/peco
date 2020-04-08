@@ -18,7 +18,7 @@ class CartPole(SymbtoolsEnv):
     Class that implements a cart-pole environment
 
     """
-    def __init__(self, time_step=0.01, init_state=np.array([pi, 0., 0., 0.]),
+    def __init__(self, time_step=0.02, init_state=np.array([pi, 0., 0., 0.]),
                  goal_state=None,
                  state_cost=np.array([5., 10., 0.01, 0.01]),
                  control_cost=np.array([0.1]),
@@ -257,6 +257,7 @@ def modeling():
 
 if __name__ == '__main__':
     modeling()
+    """
     init_state = np.array([-0.5*np.pi, 0.5, 0., 0.])
     env = CartPole(init_state=init_state)
     vid = VideoRecorder(env, 'recording/video.mp4')
@@ -267,3 +268,4 @@ if __name__ == '__main__':
         #vid.capture_frame()
     #vid.close()
     env.close()
+    """

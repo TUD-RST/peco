@@ -309,7 +309,7 @@ def modeling():
     return mod
 
 if __name__ == '__main__':
-    #modeling()
+    modeling()
     env = Acrobot(init_state=np.array([0.1, 0.1, 0, 0]))
     for i in range(1000):
         env.random_step()

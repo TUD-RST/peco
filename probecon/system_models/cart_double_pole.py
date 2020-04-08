@@ -16,16 +16,16 @@ class CartDoublePole(SymbtoolsEnv):
 
     """
     def __init__(self,
-                 time_step=0.0125,
+                 time_step=0.01,
                  init_state=np.array([pi, pi, 0., 0., 0., 0.]),
                  goal_state=None,
-                 state_cost=np.array([5., 5.,  10., 0.01, 0.01, 0.01]),
-                 control_cost=np.array([0.1]),
+                 state_cost=np.array([10., 10.,  15., 0.5, 0.5, 0.5]),
+                 control_cost=np.array([0.5]),
                  cost_function=None,
                  state_bounds=np.array([2*pi, 2*pi, 1.5, inf, inf, inf]),
-                 control_bounds=np.array([15.]),
+                 control_bounds=np.array([40.]),
                  mod_file='cart_double_pole.p',
-                 part_lin=False,
+                 part_lin=True,
                  ode_error=None,
                  m0=3.34,
                  m1=0.8512,
@@ -299,7 +299,7 @@ def modeling():
     return mod
 
 if __name__ == '__main__':
-    #modeling()
+    modeling()
     init_state = np.array([-0.5*np.pi, -0.5*np.pi, 0.2, 0, 0, 0])
     env = CartDoublePole(init_state=init_state)#init_state=np.random.uniform(-1, 1, 8))
     vid = VideoRecorder(env, 'recording/video.mp4')
