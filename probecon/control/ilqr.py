@@ -52,7 +52,8 @@ class iLQR(object):
             g_norm = np.mean(np.max(np.abs(k / (np.abs(controls) + 1)), axis=0))
             if g_norm < self.tolerance_gradient and self.mu < 1e-5:
                 self._decrease_mu()
-                success_gradient = True
+                print('Converged: small gradient')
+                break
 
             # forward pass (line-search)
             for alpha in self.alphas:
@@ -83,11 +84,6 @@ class iLQR(object):
                 if cost_red < self.tolerance_cost:
                     print('Converged: small cost improvement')
                     break
-
-                if success_gradient:
-                    print('Converged: small gradient')
-                    break
-
             else:
                 self._increase_mu()
                 print('Forward not successfull, mu {}'.format(self.mu))
