@@ -30,6 +30,7 @@ class iLQR(object):
         self.mu_d0 = 1.6
         self.alphas = 10**np.linspace(0, -3, 11) # line-search parameters
         self.parallel = True # parallel forward pass (choose best)
+        self.reg_type = 2
 
     def solve(self):
         # initial forward pass
@@ -141,27 +142,32 @@ class iLQR(object):
         # compute
         for i in range(N-1, -1, -1): # for i = (N-1,..., 0)
             # quadratic approximation of the Hamiltonian
-            Qxx = Cxx[i] + A[i].T@Vxx[i+1]@A[i]
-            Quu = Cuu[i] + B[i].T@Vxx[i+1]@B[i]
-            Qxu = Cxu[i] + A[i].T@Vxx[i+1]@B[i]
+            Qxx = Cxx[i] + A[i].T@Vxx[i + 1]@A[i]
+            Quu = Cuu[i] + B[i].T@Vxx[i + 1]@B[i]
+            Qxu = Cxu[i] + A[i].T@Vxx[i + 1]@B[i]
             Qux = Qxu.T
-            qx = cx[i] + vx[i+1]@A[i]
-            qu = cu[i] + vx[i+1]@B[i]
+            qx = cx[i] + vx[i + 1]@A[i]
+            qu = cu[i] + vx[i + 1]@B[i]
+
+            # regularization
+            Vxx_reg = Vxx[i + 1] + self.mu*np.eye(self.environment.state_dim)*(self.reg_type == 1)
+
+            # eq. (10a,10b), paper 1)
+            Quu_reg = Cuu[i] + B[i].T@Vxx_reg@B[i] + self.mu*np.eye(self.environment.control_dim)*(self.reg_type == 2)
+            Qux_reg = Cux[i] + B[i].T@Vxx_reg@A[i]
 
             # check if Quu is positive definite
             try:
-                np.linalg.cholesky(Quu)
+                np.linalg.cholesky(Quu_reg)
             except np.linalg.LinAlgError as e:
                 print(e)
                 success = False
                 break
 
-            Quu_inv = Quu**-1
-
-            #
+            # todo: add constraint optimization
             # controller gains
-            K[i] = -Quu_inv@Qux
-            k[i] = -Quu_inv@qu
+            K[i] = -np.linalg.solve(Quu_reg, Qux_reg)  # eq. (10b), paper 1)
+            k[i] = -np.linalg.solve(Quu_reg, qu) # eq. (10c), paper 1)
 
             # cost-to-go approximation
             Vxx[i] = Qxx + K[i].T@Qux + Qxu@K[i] + K[i].T@Quu@K[i]
