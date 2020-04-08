@@ -112,7 +112,8 @@ class StateSpaceEnv(gym.Env):
             'video.frames_per_second': int(1 / time_step)
         }
 
-        # if explicit cost function is given overwrite quadratic
+        # if explicit cost function is given overwrite quadratic cost
+        self.cost_function = cost_function
         if callable(cost_function):
             self._eval_cost = cost_function
 
@@ -436,6 +437,14 @@ class SymbtoolsEnv(StateSpaceEnv):
             assert(key==str(param))
 
         ode = lambda t, x, u: self.state_eq_fnc(*x, *u, *self._params_vals()).ravel()
+
+        # compute jacobians (A and B matrix)
+        ode_state_jac = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params),
+                                    self.state_eq_expr.jacobian(self.mod.xx), modules="numpy")
+        self.ode_state_jac = lambda x, u: ode_state_jac(*x, *u, *self._params_vals())
+        ode_control_jac = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params),
+                                    self.state_eq_expr.jacobian(self.mod.uu), modules="numpy")
+        self.ode_control_jac = lambda x, u: ode_control_jac(*x, *u, *self._params_vals())
 
         super(SymbtoolsEnv, self).__init__(state_dim, control_dim, ode, time_step, init_state,
                                            goal_state=goal_state,
