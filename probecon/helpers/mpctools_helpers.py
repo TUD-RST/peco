@@ -184,3 +184,8 @@ if __name__ == '__main__':
     sol = mpc_ocp.solve()
     mpc_ocp.plot()
     print(sol['sol_status'])
+    for u in sol['u_sim']:
+        env.step(u)
+        env.render()
+        #vid.capture_frame()
+    #vid.close()

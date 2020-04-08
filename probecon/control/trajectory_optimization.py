@@ -35,7 +35,6 @@ class TrajectoryOptimization(object):
         if algorithm == 'ilqr':
             self.env = PygentEnvWrapper(environment)
             self.ocp = iLQR(self.env, self.sim_time, self.env.dt,
-                            path=None,
                             fcost=terminal_cost,
                             constrained=True,
                             maxIters=200)
