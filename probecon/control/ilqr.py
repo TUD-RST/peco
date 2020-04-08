@@ -1,10 +1,11 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 import cvxopt as opt
 opt.solvers.options['show_progress'] = False
 
-from probecon.system_models.cart_pole import CartPole
+from probecon.system_models.cart_double_pole import CartDoublePole
 
 class iLQR(object):
     """
@@ -37,9 +38,10 @@ class iLQR(object):
         self.alphas = 10**np.linspace(0, -3, 11) # line-search parameters
         self.parallel = True # parallel forward pass (choose best)
         self.reg_type = 1
-        self.constrained = False # todo: based on environment
+        self.constrained = True # todo: based on environment
 
     def solve(self):
+        start_time = time.time()
         # initial forward pass
         states, controls, cost = self._initial_forward_pass()
         for iter in range(self.max_iterations):
@@ -75,7 +77,7 @@ class iLQR(object):
                     z = cost_red / exp_cost_red
                 else:
                     z = np.sign(cost_red)
-                    print('non-positive expected reduction')
+                    print('Non-positive expected reduction! (Should not occur)')
                 if z > self.zmin:
                     success_forward = True
                     break
@@ -86,19 +88,19 @@ class iLQR(object):
                 states = new_states
                 controls = new_controls
                 cost = new_cost
-                print('iter {}, cost {:6.5f}'.format(iter, cost))
+                print('Iter. {:3} | Cost {:6.5f} | Exp. red. {:6.5f}'.format(iter, cost, exp_cost_red))
 
                 if cost_red < self.tolerance_cost:
-                    print('Converged: small cost improvement')
+                    print('Converged: small cost improvement!')
                     break
             else:
                 self._increase_mu()
-                print('Forward not successfull, mu {}'.format(self.mu))
+                print('Forward pass was not successful!')
                 if self.mu > self.mu_max:
-                    print('mu > mu_max')
                     break
 
         sol = {'states': states, 'controls': controls, 'K': K, 'k': k, 'alpha': alpha, 'cost': cost}
+        print('Duration: {:3.2f} minutes'.format((time.time()-start_time)/60))
         return sol
 
     def _forward_pass(self, alpha, states, controls, KK, kk):
@@ -233,8 +235,8 @@ class iLQR(object):
             Cuu = np.kron(R, np.ones((self.horizon, 1, 1)))  # shape (N, control_dim, control_dim)
             Cxu = np.kron(P, np.ones((self.horizon, 1, 1))) # shape (N, state_dim, control_dim)
             Cux = np.kron(P.T, np.ones((self.horizon, 1, 1))) # shape (N, control_dim, state_dim)
-            cx = np.array([(state-self.environment.goal_state)@S + control@P.T for (state, control) in zip(states, controls)]) # shape (N, state_dim)
-            cu = np.array([(state-self.environment.goal_state)@P + control@R for (state, control) in zip(states, controls)]) # shape (N, control_dim)
+            cx = (states[:-1]-self.environment.goal_state)@S + controls@P.T # shape (N, state_dim)
+            cu = (states[:-1]-self.environment.goal_state)@P + controls@R # shape (N, control_dim)
             Cxx_N = S_N # shape (state_dim, state_dim)
             cx_N = states[-1]@S_N # shape (state_dim, )
             return Cxx, Cuu, Cxu, Cux, cx, cu, Cxx_N, cx_N
@@ -259,8 +261,8 @@ class iLQR(object):
         pass
 
 if __name__=="__main__":
-    env = CartPole()
-    horizon = 5.
+    env = CartDoublePole()
+    horizon = 3.5
     algo = iLQR(env, horizon)
     algo.solve()
     env.plot()
