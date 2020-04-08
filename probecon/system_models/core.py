@@ -8,7 +8,6 @@ from scipy.integrate import solve_ivp
 import pickle
 import matplotlib.pyplot as plt
 
-
 class StateSpaceEnv(gym.Env):
     """
     Class for a state-space model environment, that is compatible with OpenAI's Gym.
@@ -425,8 +424,9 @@ class SymbtoolsEnv(StateSpaceEnv):
             self.state_eq_expr = self.mod.f + self.mod.g*self.mod.uu #self.mod.state_eq
         try:
             import sympy_to_c as sp2c
-            self.state_eq_fnc = sp2c.convert_to_c((*self.mod.xx, *self.mod.uu, *self.mod.params), self.state_eq_expr, use_exisiting_so=False)
-            print('c code')
+            self.state_eq_fnc = sp2c.convert_to_c((*self.mod.xx, *self.mod.uu, *self.mod.params), self.state_eq_expr,
+                                                  cfilepath='state_eq_fnc.c',
+                                                  use_exisiting_so=False)
         except:
             self.state_eq_fnc = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params), self.state_eq_expr, modules="numpy")  # creating a callable python function
 
@@ -440,11 +440,28 @@ class SymbtoolsEnv(StateSpaceEnv):
         ode = lambda t, x, u: self.state_eq_fnc(*x, *u, *self._params_vals()).ravel()
 
         # compute jacobians (A and B matrix)
-        ode_state_jac = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params),
-                                    self.state_eq_expr.jacobian(self.mod.xx), modules="numpy")
+        if part_lin:
+            state_jac = self.mod.ode_state_jac_lin
+            control_jac = self.mod.ode_control_jac_lin
+        else:
+            state_jac = self.mod.ode_state_jac
+            control_jac = self.mod.ode_control_jac
+        try:
+            raise NotImplementedError
+            import sympy_to_c as sp2c
+            # todo: sympy-to-c seems to have a problem here, because not all symbols appear in state_jac, control_jac
+            ode_state_jac = sp2c.convert_to_c((*self.mod.xx, *self.mod.uu, *self.mod.params), state_jac,
+                                                  cfilepath='state_jac.c',
+                                                  use_exisiting_so=False)
+            ode_control_jac = sp2c.convert_to_c((*self.mod.xx, *self.mod.uu, *self.mod.params), control_jac,
+                                                  cfilepath='control_jac.c',
+                                                  use_exisiting_so=False)
+        except:
+            ode_state_jac = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params), state_jac, modules="numpy")
+            ode_control_jac = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params), control_jac, modules="numpy")
+
         self.ode_state_jac = lambda x, u: ode_state_jac(*x, *u, *self._params_vals())
-        ode_control_jac = sp.lambdify((*self.mod.xx, *self.mod.uu, *self.mod.params),
-                                    self.state_eq_expr.jacobian(self.mod.uu), modules="numpy")
+
         self.ode_control_jac = lambda x, u: ode_control_jac(*x, *u, *self._params_vals())
 
         super(SymbtoolsEnv, self).__init__(state_dim, control_dim, ode, time_step, init_state,
