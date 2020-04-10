@@ -24,7 +24,7 @@ class CartPole(SymbtoolsEnv):
                  control_cost=np.array([0.1]),
                  cost_function=None,
                  state_bounds=np.array([2*pi, 1., inf, inf]),
-                 control_bounds=np.array([10.]),
+                 control_bounds=np.array([40.]),
                  mod_file='cart_pole.p',
                  part_lin=True,
                  ode_error=None,

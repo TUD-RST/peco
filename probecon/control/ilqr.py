@@ -6,16 +6,54 @@ import cvxopt as opt
 opt.solvers.options['show_progress'] = False
 
 from probecon.system_models.cart_double_pole import CartDoublePole
+from probecon.system_models.cart_pole import CartPole
 
 class iLQR(object):
     """
-    Class that wraps different trajectory optimization solvers.
+    Implementation of the iterative linear-quadratic regulator (iLQR) algorithm,
+    that solves nonlinear optimal control problems.
+
+    Implementation based on:
+
+    https://de.mathworks.com/matlabcentral/fileexchange/52069-ilqg-ddp-trajectory-optimization
+
+    Papers:
+
+    1) Y. Tassa, T. Erez, E. Todorov: Synthesis and Stabilization of Complex Behaviours through
+    Online Trajectory Optimization
+    Link: https://homes.cs.washington.edu/~todorov/papers/TassaIROS12.pdf
+
+    2) Y. Tassa, N. Monsard, E. Todorov: Control-Limited Differential Dynamic Programming
+    Link: https://homes.cs.washington.edu/~todorov/papers/TassaICRA14.pdf
+
 
     """
-    def __init__(self, environment, horizon):
+    def __init__(self, environment, horizon,
+                 terminal_cost_factor=100.,
+                 max_iterations=500,
+                 reg_type=1,
+                 tolerance_gradient=1e-4,
+                 tolerance_cost=1e-7,
+                 parallel_line_search=False):
         """
 
         Args:
+            environment (probecon.system_model.core.SymbtoolsEnv):
+                environment obejct of optimization
+            terminal_cost_factor (float):
+                scalar, by which the incremental cost is multiplied to form the terminal cost
+            max_iterations (int):
+                maximum number of iterations
+            reg_type(int):
+                regularizaton type of the backward pass:
+                    1:
+                    2:
+            tolerance_gradient (float):
+                gradient
+            parallel_line_search (bool):
+                if True, a parallel line-search is performed
+            constrained (bool):
+                if True, control constrained version of iLQR is used
             
         """
         self.environment = environment
@@ -23,31 +61,51 @@ class iLQR(object):
             self.horizon = int(horizon/self.environment.time_step)
         else:
             self.horizon = horizon
-        self.terminal_cost_factor = 100.
-        self.max_iterations = 500
-        self.zmin = 0.
-        self.tolerance_cost = 1e-7
-        self.tolerance_gradient = 1e-4
+        self.terminal_cost_factor = terminal_cost_factor
+        self.max_iterations = max_iterations
+
+        self.tolerance_cost = tolerance_cost
+        self.tolerance_gradient = tolerance_gradient
+
         # regularization parameter
+        self.reg_type = reg_type
         self.mu = 1e-6
         self.mu_max = 1e6
         self.mu_min = 1e-6
         self.mu_init = 1e-6
         self.mu_d = 1.
         self.mu_d0 = 1.6
-        self.alphas = 10**np.linspace(0, -3, 11) # line-search parameters
-        self.parallel = True # parallel forward pass (choose best)
-        self.reg_type = 1
+
+        # line-search parameters
+        self.alphas = 10**np.linspace(0, -3, 11)
+        self.parallel = parallel_line_search # parallel forward pass (choose best)
+
+        self.zmin = 0.
         self.constrained = True # todo: based on environment
 
     def solve(self):
+        """
+        Solve the trajectory optimziation problem
+
+        Returns:
+            sol (dict):
+                'states' (numpy.ndarray):
+                    (locally) optimal state trajectory, shape: (N, state_dim)
+                'controls' (numpy.ndarray):
+                    (locally) optimal contorl input trajectory, shape: (N-1, control_dim)
+                'K' (numpy.ndarray):
+                    feedback matrices, shape: (N-1, state_dim, control_dim)
+                'k' (numpy.ndarray):
+                    feedforward terms, shape: (N-1, control_dim, )
+                'alpha' (float):
+                    line-search parameter
+
+        """
         start_time = time.time()
-        # initial forward pass
         states, controls, cost = self._initial_forward_pass()
         for iter in range(self.max_iterations):
             success_backward = False
             success_forward = False
-
             # backward pass
             while not success_backward:
                 K, k, dV, success_backward = self._backward_pass(states, controls)
@@ -65,9 +123,19 @@ class iLQR(object):
                 print('Converged: small gradient')
                 break
 
+            states_list = []
+            controls_list = []
+            cost_list = []
             # forward pass (line-search)
             for alpha in self.alphas:
                 new_states, new_controls, new_cost = self._forward_pass(alpha, states, controls, K, k)
+                states_list.append(new_states)
+                controls_list.append(new_controls)
+                cost_list.append(new_cost)
+                # check if foward diverged
+                if np.any(new_states > 1e8):
+                    print('Forward pass diverged.')
+                    break
 
                 # check, if forward pass was successful
                 cost_red = cost - new_cost
@@ -80,14 +148,18 @@ class iLQR(object):
                     print('Non-positive expected reduction! (Should not occur)')
                 if z > self.zmin:
                     success_forward = True
-                    break
+                    if not self.parallel:
+                        break
+
 
             if success_forward:
                 self._decrease_mu()
+                best_idx = np.argmin(cost_list)
+                states = states_list[best_idx]
+                controls = controls_list[best_idx]
+                cost = cost_list[best_idx]
+                alpha = self.alphas[best_idx]
 
-                states = new_states
-                controls = new_controls
-                cost = new_cost
                 print('Iter. {:3} | Cost {:6.5f} | Exp. red. {:6.5f}'.format(iter, cost, exp_cost_red))
 
                 if cost_red < self.tolerance_cost:
@@ -104,6 +176,30 @@ class iLQR(object):
         return sol
 
     def _forward_pass(self, alpha, states, controls, KK, kk):
+        """
+        Forward pass
+
+        Returns:
+            alpha (float):
+                line-search parameter
+            states (numpy.ndarray):
+                state trajectory, shape: (N, state_dim)
+            controls (numpy.ndarray):
+                control input trajectory, shape: (N-1, control_dim)
+            KK (numpy.ndarray):
+                feedback matrices, shape: (N-1, state_dim, control_dim)
+            kk (numpy.ndarray):
+                feedforward term, shape (N-1, control_dim, )
+
+        Returns:
+            states (numpy.ndarray):
+                state trajectory, shape: (N, state_dim)
+            controls (numpy.ndarray):
+                control input trajectory, shape: (N-1, control_dim)
+            cost (float):
+                cost of the trajectory
+
+        """
         self.environment.reset()
         cost = 0.
         for state, control, K, k in zip(states, controls, KK, kk):
@@ -112,9 +208,22 @@ class iLQR(object):
             cost -= reward
         states = self.environment.trajectory['states']
         controls = self.environment.trajectory['controls']
+        # todo: add final cost
         return states, controls, cost
 
     def _initial_forward_pass(self):
+        """
+        Initial forward pass
+
+        Returns:
+            states (numpy.ndarray):
+                    state trajectory, shape: (N, state_dim)
+            controls (numpy.ndarray):
+                control input trajectory, shape: (N-1, control_dim)
+            cost (float):
+                cost of the trajectory
+
+        """
         self.environment.reset()
         cost = 0.
         for k in range(self.horizon):
@@ -123,29 +232,49 @@ class iLQR(object):
             cost -= reward
         states = self.environment.trajectory['states']
         controls = self.environment.trajectory['controls']
+        # todo: add final cost
         return states, controls, cost
 
     def _backward_pass(self, states, controls):
+        """
+        Backward pass
+
+            Args:
+                states (numpy.ndarray):
+                    state trajectory, shape: (N, state_dim)
+                controls (numpy.ndarray):
+                    control input trajectory, shape: (N-1, control_dim)
+
+            Returns:
+                K (numpy.ndarray):
+                    feedback matrices, shape: (N-1, state_dim, control_dim)
+                k (numpy.ndarray):
+                    feedforward term, shape (N-1, control_dim, )
+                dV (numpy.ndarray):
+                    estimated cost improvement, shape (N-1, 2, )
+                success (bool):
+                    False, if any Quu is not positive definite
+        """
         A, B = self._taylor_system(states, controls)
         Cxx, Cuu, Cxu, Cux, cx, cu, Cxx_N, cx_N = self._taylor_cost(states, controls)
-        N = self.horizon
+        N = self.horizon + 1
 
-        Vxx = np.zeros((N + 1, self.environment.state_dim, self.environment.state_dim))
-        vx = np.zeros((N + 1, self.environment.state_dim))
+        Vxx = np.zeros((N, self.environment.state_dim, self.environment.state_dim))
+        vx = np.zeros((N, self.environment.state_dim))
 
-        K = np.zeros((N, self.environment.control_dim, self.environment.state_dim))
-        k = np.zeros((N, self.environment.control_dim,))
+        K = np.zeros((N-1, self.environment.control_dim, self.environment.state_dim))
+        k = np.zeros((N-1, self.environment.control_dim,))
 
-        dV = np.zeros((N, 2))
+        dV = np.zeros((N-1, 2))
 
         # boundary condition
-        Vxx[N] = Cxx_N
-        vx[N] = cx_N
+        Vxx[N-1] = Cxx_N
+        vx[N-1] = cx_N
 
         success = True
 
         # compute
-        for i in range(N-1, -1, -1): # for i = (N-1,..., 0)
+        for i in range(N-2, -1, -1): # for i = (N-1,..., 0)
             # quadratic approximation of the Hamiltonian
             Qxx = Cxx[i] + A[i].T@Vxx[i + 1]@A[i]
             Quu = Cuu[i] + B[i].T@Vxx[i + 1]@B[i]
@@ -209,6 +338,22 @@ class iLQR(object):
         return K, k, dV, success
 
     def _taylor_system(self, states, controls):
+        """
+            1st order Taylor approximation of the dynamics 'f_k(state_k, control_k)'
+
+            Args:
+                states (numpy.ndarray):
+                    state trajectory, shape: (N, state_dim)
+                controls (numpy.ndarray):
+                    control input trajectory, shape: (N-1, control_dim)
+
+            Returns:
+                A (numpy.ndarray):
+                    time-variant system-matrices, shape: (N, state_dim, state_dim)
+                B (numpy.ndarray):
+                    time_variant input-matrices, shape: (N, state_dim, contorl_dim)
+
+        """
         if self.environment.__class__.__bases__[0].__name__=='SymbtoolsEnv':
             A = np.array([np.eye(self.environment.state_dim)
                           + self.environment.time_step*self.environment.ode_state_jac(state, control)
@@ -224,21 +369,57 @@ class iLQR(object):
         return A, B
 
     def _taylor_cost(self, states, controls):
-        # states with shape (N+1, state_dim)
-        # controls with shape (N, control_dim)
+        """
+        2nd order Taylor approximation of the cost function 'c_k(state_k, control_k)' and 'c_N(state_N)'
+
+        with x_k = state_k - state_ref_k, u_k = control_k - control_ref_k
+
+        index 'ref' indicates trajectory, where the linearization takes place (states, controls)
+
+        for k = 0,...,N-1
+        c_k = 0.5*(x_k.T@Cxx[k]@x + u_k.T@Cuu[k]@u_k.T + x_k.T@Cxu[k]@u_k.T + u_k.T@Cux[k]@x_k) + cx_k@x_k + cu_k@u_k)
+
+        c_N = 0.5*x_N.T@Cxx_N@x_N + cx_N@x_N
+
+        Args:
+            states (numpy.ndarray):
+                state trajectory, shape: (N, state_dim)
+            controls (numpy.ndarray):
+                control input trajectory, shape: (N-1, control_dim)
+
+        Returns:
+            Cxx (numpy.ndarray):
+                shape: (N-1, state_dim, state_dim)
+            Cuu (numpy.ndarray):
+                shape: (N-1, control_dim, control_dim)
+            Cxu (numpy.ndarray):
+                shape: (N-1, state_dim, control_dim)
+            Cux (numpy.ndarray):
+                shape: (N-1, control_dim, state_dim)
+            cx (numpy.ndarray):
+                shape: (N-1, state_dim, )
+            cu (numpy.ndarray):
+                shape: (N-1, state_dim, )
+            Cxx_N (numpy.ndarray):
+                shape: (state_dim, state_dim, )
+            cx_N (numpy.ndarray):
+                shape: (state_dim, )
+
+        """
         if self.environment.cost_function is None:
             S = self.environment.state_cost*self.environment.time_step
             S_N = S * self.terminal_cost_factor*self.environment.time_step
             R = self.environment.control_cost*self.environment.time_step
             P = np.zeros((self.environment.state_dim, self.environment.control_dim))
-            Cxx = np.kron(S, np.ones((self.horizon, 1, 1))) # shape (N, state_dim, state_dim)
-            Cuu = np.kron(R, np.ones((self.horizon, 1, 1)))  # shape (N, control_dim, control_dim)
-            Cxu = np.kron(P, np.ones((self.horizon, 1, 1))) # shape (N, state_dim, control_dim)
-            Cux = np.kron(P.T, np.ones((self.horizon, 1, 1))) # shape (N, control_dim, state_dim)
-            cx = (states[:-1]-self.environment.goal_state)@S + controls@P.T # shape (N, state_dim)
-            cu = (states[:-1]-self.environment.goal_state)@P + controls@R # shape (N, control_dim)
-            Cxx_N = S_N # shape (state_dim, state_dim)
-            cx_N = states[-1]@S_N # shape (state_dim, )
+
+            Cxx = np.kron(S, np.ones((self.horizon, 1, 1)))
+            Cuu = np.kron(R, np.ones((self.horizon, 1, 1)))
+            Cxu = np.kron(P, np.ones((self.horizon, 1, 1)))
+            Cux = np.kron(P.T, np.ones((self.horizon, 1, 1)))
+            cx = (states[:-1]-self.environment.goal_state)@S + controls@P.T
+            cu = (states[:-1]-self.environment.goal_state)@P + controls@R
+            Cxx_N = S_N
+            cx_N = states[-1]@S_N
             return Cxx, Cuu, Cxu, Cux, cx, cu, Cxx_N, cx_N
         else:
             # todo: compute with autodiff from an arbitrary function
@@ -261,7 +442,7 @@ class iLQR(object):
         pass
 
 if __name__=="__main__":
-    env = CartDoublePole()
+    env = CartPole()
     horizon = 3.5
     algo = iLQR(env, horizon)
     algo.solve()
