@@ -81,7 +81,13 @@ class iLQR(object):
         self.parallel = parallel_line_search # parallel forward pass (choose best)
 
         self.zmin = 0.
-        self.constrained = True # todo: based on environment
+
+        # constraints parameters
+        self.q1 = 10. # 1.
+        self.q2 = 200. # 5.
+        self.constrained_control = True
+        self.constrained_state = True
+        self.constraint_mode = 2 # if 1, use QP optimization from paper 2), if 2 use augmented cost
 
     def solve(self):
         """
@@ -151,7 +157,6 @@ class iLQR(object):
                     if not self.parallel:
                         break
 
-
             if success_forward:
                 self._decrease_mu()
                 best_idx = np.argmin(cost_list)
@@ -203,12 +208,15 @@ class iLQR(object):
         self.environment.reset()
         cost = 0.
         for state, control, K, k in zip(states, controls, KK, kk):
-            policy = K@(env.state - state) + alpha*k + control
+            policy = K@(self.environment.state - state) + alpha*k + control
+            if self.constrained_control:
+                policy = np.clip(policy, self.environment.control_space.low, self.environment.control_space.high)
+            cost += self._constraint_cost(self.environment.state, policy)
             state, reward, done, info = self.environment.step(policy)
             cost -= reward
         states = self.environment.trajectory['states']
         controls = self.environment.trajectory['controls']
-        # todo: add final cost
+        cost += states[-1]@np.eye(self.environment.state_dim)@states[-1]*self.terminal_cost_factor*self.environment.time_step
         return states, controls, cost
 
     def _initial_forward_pass(self):
@@ -228,11 +236,12 @@ class iLQR(object):
         cost = 0.
         for k in range(self.horizon):
             control = np.zeros(self.environment.control_dim)
+            cost += self._constraint_cost(env.state, control)
             state, reward, done, info = self.environment.step(control)
             cost -= reward
         states = self.environment.trajectory['states']
         controls = self.environment.trajectory['controls']
-        # todo: add final cost
+        cost += states[-1] @ np.eye(self.environment.state_dim) @ states[-1] * self.terminal_cost_factor * self.environment.time_step
         return states, controls, cost
 
     def _backward_pass(self, states, controls):
@@ -257,6 +266,7 @@ class iLQR(object):
         """
         A, B = self._taylor_system(states, controls)
         Cxx, Cuu, Cxu, Cux, cx, cu, Cxx_N, cx_N = self._taylor_cost(states, controls)
+        Hxx, hx, Huu, hu = self._taylor_constraints(states, controls)
         N = self.horizon + 1
 
         Vxx = np.zeros((N, self.environment.state_dim, self.environment.state_dim))
@@ -276,12 +286,12 @@ class iLQR(object):
         # compute
         for i in range(N-2, -1, -1): # for i = (N-1,..., 0)
             # quadratic approximation of the Hamiltonian
-            Qxx = Cxx[i] + A[i].T@Vxx[i + 1]@A[i]
-            Quu = Cuu[i] + B[i].T@Vxx[i + 1]@B[i]
+            Qxx = Cxx[i] + A[i].T@Vxx[i + 1]@A[i] + Hxx[i]
+            Quu = Cuu[i] + B[i].T@Vxx[i + 1]@B[i] + Huu[i]
             Qxu = Cxu[i] + A[i].T@Vxx[i + 1]@B[i]
             Qux = Qxu.T
-            qx = cx[i] + vx[i + 1]@A[i]
-            qu = cu[i] + vx[i + 1]@B[i]
+            qx = cx[i] + vx[i + 1]@A[i] + hx[i]
+            qu = cu[i] + vx[i + 1]@B[i] + hu[i]
 
             # regularization
             Vxx_reg = Vxx[i + 1] + self.mu*np.eye(self.environment.state_dim)*(self.reg_type == 2)
@@ -298,8 +308,7 @@ class iLQR(object):
                 success = False
                 break
 
-            # todo: add constraint optimization
-            if self.constrained:  # solve QP, eq. (11), paper 2)
+            if self.constraint_mode == 1:  # solve QP, eq. (11), paper 2)
                 # convert matrices
                 Quu_opt = opt.matrix(Quu_reg)
                 qu_opt = opt.matrix(qu)
@@ -408,7 +417,7 @@ class iLQR(object):
         """
         if self.environment.cost_function is None:
             S = self.environment.state_cost*self.environment.time_step
-            S_N = S * self.terminal_cost_factor*self.environment.time_step
+            S_N = np.eye(self.environment.state_dim)*self.terminal_cost_factor*self.environment.time_step
             R = self.environment.control_cost*self.environment.time_step
             P = np.zeros((self.environment.state_dim, self.environment.control_dim))
 
@@ -419,11 +428,53 @@ class iLQR(object):
             cx = (states[:-1]-self.environment.goal_state)@S + controls@P.T
             cu = (states[:-1]-self.environment.goal_state)@P + controls@R
             Cxx_N = S_N
-            cx_N = states[-1]@S_N
+            cx_N = (states[-1]-self.environment.goal_state)@S_N
             return Cxx, Cuu, Cxu, Cux, cx, cu, Cxx_N, cx_N
         else:
             # todo: compute with autodiff from an arbitrary function
             raise NotImplementedError
+
+    def _taylor_constraints(self, states, controls):
+        """
+        2nd order Taylor approximation of the state constrained barrier function
+
+        with x_k = state_k - state_ref_k, u_k = control_k - control_ref_k
+
+        index 'ref' indicates trajectory, where the linearization takes place (states, controls)
+
+        for k = 0,...,N-1
+        c_k = 0.5*(x_k.T@Cxx[k]@x + u_k.T@Cuu[k]@u_k.T + x_k.T@Cxu[k]@u_k.T + u_k.T@Cux[k]@x_k) + cx_k@x_k + cu_k@u_k)
+
+        c_N = 0.5*x_N.T@Cxx_N@x_N + cx_N@x_N
+
+        Args:
+            states (numpy.ndarray):
+                state trajectory, shape: (N, state_dim)
+            controls (numpy.ndarray):
+                control input trajectory, shape: (N-1, control_dim)
+
+        Returns:
+            Hxx (numpy.ndarray):
+                shape: (N-1, state_dim, state_dim)
+            hx (numpy.ndarray):
+                shape: (N-1, state_dim, )
+        """
+        jac_high = states[:-1] - self.environment.state_space.high
+        jac_low = -states[:-1] + self.environment.state_space.low
+        hx = self.q1*self.q2*(np.exp(self.q2*jac_high) + np.exp(self.q2*jac_low))
+        Hxx = np.array([np.diag(self.q2*h) for h in hx])
+        jac_high = controls - self.environment.control_space.high
+        jac_low = - controls + self.environment.control_space.low
+        hu = self.q1 * self.q2 * (np.exp(self.q2 * jac_high) + np.exp(self.q2 * jac_low))
+        Huu = np.array([np.diag(self.q2 * h) for h in hu])
+        return Hxx, hx, Huu, hu
+
+    def _constraint_cost(self, state, control):
+        cost = np.sum(self.q1*(np.exp(self.q2*(state - self.environment.state_space.high)) +
+                               np.exp(self.q2*(- state + self.environment.state_space.low))))
+        cost += np.sum(self.q1*(np.exp(self.q2*(control - self.environment.control_space.high)) +
+                                np.exp(self.q2*(-control + self.environment.control_space.low))))
+        return cost
 
     def _decrease_mu(self):
         """
@@ -443,8 +494,8 @@ class iLQR(object):
 
 if __name__=="__main__":
     env = CartPole()
-    horizon = 3.5
-    algo = iLQR(env, horizon)
+    horizon = 5.
+    algo = iLQR(env, horizon, terminal_cost_factor=1.)
     algo.solve()
     env.plot()
     plt.show()
