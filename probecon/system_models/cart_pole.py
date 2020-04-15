@@ -20,10 +20,10 @@ class CartPole(SymbtoolsEnv):
     """
     def __init__(self, time_step=0.02, init_state=np.array([pi, 0., 0., 0.]),
                  goal_state=None,
-                 state_cost=np.array([5., 10., 0.01, 0.01]),
+                 state_cost=np.array([10., 20., 0.02, 0.02]),
                  control_cost=np.array([0.1]),
                  cost_function=None,
-                 state_bounds=np.array([2*pi, 1., inf, inf]),
+                 state_bounds=np.array([2*pi, 1.2, inf, 4.]),
                  control_bounds=np.array([40.]),
                  mod_file='cart_pole.p',
                  part_lin=True,
@@ -257,15 +257,13 @@ def modeling():
 
 if __name__ == '__main__':
     modeling()
-    """
     init_state = np.array([-0.5*np.pi, 0.5, 0., 0.])
     env = CartPole(init_state=init_state)
     vid = VideoRecorder(env, 'recording/video.mp4')
     env.reset()
     for i in range(500):
         env.random_step()
-        env.render()
-        #vid.capture_frame()
-    #vid.close()
-    env.close()
-    """
+        #env.render()
+        vid.capture_frame()
+    vid.close()
+    #env.close()
