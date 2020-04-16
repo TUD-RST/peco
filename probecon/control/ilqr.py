@@ -5,12 +5,12 @@ import time
 import cvxopt as opt
 opt.solvers.options['show_progress'] = False
 
-from probecon.system_models.cart_double_pole import CartDoublePole
 from probecon.system_models.cart_pole import CartPole
+from gym.wrappers.monitoring.video_recorder import VideoRecorder
 
 class iLQR(object):
     """
-    Implementation of the iterative linear-quadratic regulator (iLQR) algorithm,
+    State- and control-constrained version of the iterative linear-quadratic regulator (iLQR) algorithm,
     that solves nonlinear optimal control problems.
 
     Implementation based on:
@@ -26,34 +26,78 @@ class iLQR(object):
     2) Y. Tassa, N. Monsard, E. Todorov: Control-Limited Differential Dynamic Programming
     Link: https://homes.cs.washington.edu/~todorov/papers/TassaICRA14.pdf
 
+    3) J. Chen, W. Zhan, M. Tomizuka: Constrained Iterative LQR for On-Road Autonomous Driving Motion Planning
+    Link: https://ieeexplore.ieee.org/abstract/document/8317745
+
+    The basic iLQR algorithm is based on paper 1). To extend the algorithm to incorporate inequality constraints on the control,
+    the method in paper 2) solves a quadratic programm (QP).
+
+    To further integrate inequality state constraints (and control constraints) the penalty method from paper 3) is adapted.
+    While paper 2) allows for solving the constrained problem directly, paper 3) transforms the constrained problem to
+    a non-constrained problem by adding the constraints to the objective-function of the optimization using barrier functions.
+
+    Further reading: https://en.wikipedia.org/wiki/Penalty_method
+
+    We use inequality constraints of the form (x: state, u: control):
+
+        f_1 = (x_k - x_max) <= 0, f_2 = (-x_k + x_min) <= 0, f_3 = (u_k - u_max) <= 0, f_4 = (-u_k + u_min) <= 0
+
+    The barrier function that is used is: b_i = q1*exp(q2*f_i), i = [1, 2, 3, 4]
+
+    Since 'f' is always <=0, if the constraint is not violated, for large q2, this term is close to zero. If however the
+    constraint is violated and f>0 the barrier function 'b' takes large values. For details see paper 3).
+
+    To ensure, that the control input is 0. at time step k=0, an exponentially decaying weight 'q3*exp(-q4*k)' with
+    parameters 'q3' and 'q4' is added on the control cost.
 
     """
     def __init__(self, environment, horizon,
-                 terminal_cost_factor=100.,
+                 terminal_cost_factor=0.,
                  max_iterations=500,
                  reg_type=1,
                  tolerance_gradient=1e-4,
                  tolerance_cost=1e-7,
-                 parallel_line_search=False):
+                 parallel_line_search=False,
+                 constrained_control=True,
+                 constrained_state=False,
+                 solve_qp=False,
+                 q1=0.001,
+                 q2=500.,
+                 q3=1000.,
+                 q4=20.):
         """
 
         Args:
             environment (probecon.system_model.core.SymbtoolsEnv):
                 environment obejct of optimization
             terminal_cost_factor (float):
-                scalar, by which the incremental cost is multiplied to form the terminal cost
+                scalar, by which the identity matrix is multiplied to form the terminal cost matrix
             max_iterations (int):
                 maximum number of iterations
             reg_type(int):
-                regularizaton type of the backward pass:
-                    1:
-                    2:
+                regularizaton type of the backward pass (see paper: 2)
+                    1: Quu + mu*np.eye()
+                    2: Vxx + mu*np.eye()
+            tolerance_cost (float):
+                cost reduction exit criterion
             tolerance_gradient (float):
-                gradient
+                gradient exit criterion
             parallel_line_search (bool):
                 if True, a parallel line-search is performed
-            constrained (bool):
-                if True, control constrained version of iLQR is used
+            constrained_control (bool):
+                if True, control-constrained version of iLQR is used
+            constrained_state (bool):
+                if True, state-constrained version of iLQR is used
+            solve_qp (bool):
+                if True and 'constrained_control==True', the QP
+            q1 (float):
+                barrier function parameter, gain at the boundary of the constraint
+            q2 (float):
+                barrier function parameter, parameter in the exponential
+            q3 (float):
+                exponentially decaying weight parameter, gain of the added cost
+            q4 (float):
+                exponentially decaying weight parameter, gain of the added cost
             
         """
         self.environment = environment
@@ -62,12 +106,13 @@ class iLQR(object):
         else:
             self.horizon = horizon
         self.terminal_cost_factor = terminal_cost_factor
+        self.terminal_cost_matrix = np.eye(self.environment.state_dim)*self.terminal_cost_factor*self.environment.time_step
         self.max_iterations = max_iterations
 
         self.tolerance_cost = tolerance_cost
         self.tolerance_gradient = tolerance_gradient
 
-        # regularization parameter
+        # regularization parameter (see paper 2) for details)
         self.reg_type = reg_type
         self.mu = 1e-6
         self.mu_max = 1e6
@@ -80,14 +125,22 @@ class iLQR(object):
         self.alphas = 10**np.linspace(0, -3, 11)
         self.parallel = parallel_line_search # parallel forward pass (choose best)
 
+        # if cost - new_cost > zmin, forward pass is successfull
         self.zmin = 0.
 
         # constraints parameters
-        self.q1 = 10. # 1.
-        self.q2 = 200. # 5.
-        self.constrained_control = True
-        self.constrained_state = True
-        self.constraint_mode = 2 # if 1, use QP optimization from paper 2), if 2 use augmented cost
+        self.constrained_control = constrained_control
+        self.constrained_state = constrained_state
+        self.solve_qp = solve_qp  # if True, use QP optimization from paper 2), if 2 use augmented cost
+
+        # barrier function parameters (see paper 3) for details)
+        self.q1 = q1 # gain at the boundary of the constraint
+        self.q2 = q2 # parameter in the exponential
+
+        # exponentially decaying weight parameters
+        self.q3 = q3 # gain
+        self.q4 = q4 # parameter in the exponential
+
 
     def solve(self):
         """
@@ -116,7 +169,7 @@ class iLQR(object):
             while not success_backward:
                 K, k, dV, success_backward = self._backward_pass(states, controls)
                 if not success_backward:
-                    print('Backward not successful')
+                    print('Backward pass not successful')
                     self._increase_mu()
                     if self.mu > self.mu_max:
                         print('mu > mu_max')
@@ -164,16 +217,15 @@ class iLQR(object):
                 controls = controls_list[best_idx]
                 cost = cost_list[best_idx]
                 alpha = self.alphas[best_idx]
-
                 print('Iter. {:3} | Cost {:6.5f} | Exp. red. {:6.5f}'.format(iter, cost, exp_cost_red))
-
                 if cost_red < self.tolerance_cost:
                     print('Converged: small cost improvement!')
                     break
             else:
                 self._increase_mu()
-                print('Forward pass was not successful!')
+                print('Iter. {:3} | Forward pass not successful'.format(iter))
                 if self.mu > self.mu_max:
+                    print('mu > mu_max')
                     break
 
         sol = {'states': states, 'controls': controls, 'K': K, 'k': k, 'alpha': alpha, 'cost': cost}
@@ -216,7 +268,7 @@ class iLQR(object):
             cost -= reward
         states = self.environment.trajectory['states']
         controls = self.environment.trajectory['controls']
-        cost += states[-1]@np.eye(self.environment.state_dim)@states[-1]*self.terminal_cost_factor*self.environment.time_step
+        cost += 0.5*states[-1]@self.terminal_cost_matrix@states[-1]
         return states, controls, cost
 
     def _initial_forward_pass(self):
@@ -241,7 +293,7 @@ class iLQR(object):
             cost -= reward
         states = self.environment.trajectory['states']
         controls = self.environment.trajectory['controls']
-        cost += states[-1] @ np.eye(self.environment.state_dim) @ states[-1] * self.terminal_cost_factor * self.environment.time_step
+        cost += 0.5*states[-1]@self.terminal_cost_matrix@states[-1]
         return states, controls, cost
 
     def _backward_pass(self, states, controls):
@@ -304,11 +356,11 @@ class iLQR(object):
             try:
                 np.linalg.cholesky(Quu_reg)
             except np.linalg.LinAlgError as e:
-                print(e)
+                print('Quu not positve definite!')
                 success = False
                 break
 
-            if self.constraint_mode == 1:  # solve QP, eq. (11), paper 2)
+            if self.solve_qp and self.constrained_control:  # solve QP, eq. (11), paper 2)
                 # convert matrices
                 Quu_opt = opt.matrix(Quu_reg)
                 qu_opt = opt.matrix(qu)
@@ -421,12 +473,13 @@ class iLQR(object):
             R = self.environment.control_cost*self.environment.time_step
             P = np.zeros((self.environment.state_dim, self.environment.control_dim))
 
+            exp_weight = self.q3*np.exp(-self.q4*np.arange(self.horizon)*self.environment.time_step)
             Cxx = np.kron(S, np.ones((self.horizon, 1, 1)))
-            Cuu = np.kron(R, np.ones((self.horizon, 1, 1)))
+            Cuu = np.kron(R, np.ones((self.horizon, 1, 1)) + exp_weight.reshape(self.horizon, 1, 1))
             Cxu = np.kron(P, np.ones((self.horizon, 1, 1)))
             Cux = np.kron(P.T, np.ones((self.horizon, 1, 1)))
             cx = (states[:-1]-self.environment.goal_state)@S + controls@P.T
-            cu = (states[:-1]-self.environment.goal_state)@P + controls@R
+            cu = (states[:-1]-self.environment.goal_state)@P + controls*Cuu[:, :, 0] # + controls@R
             Cxx_N = S_N
             cx_N = (states[-1]-self.environment.goal_state)@S_N
             return Cxx, Cuu, Cxu, Cux, cx, cu, Cxx_N, cx_N
@@ -455,25 +508,40 @@ class iLQR(object):
 
         Returns:
             Hxx (numpy.ndarray):
-                shape: (N-1, state_dim, state_dim)
+                shape: (N, state_dim, state_dim)
             hx (numpy.ndarray):
-                shape: (N-1, state_dim, )
+                shape: (N, state_dim, )
+            Huu (numpy.ndarray):
+                shape: (N, control_dim, control_dim)
+            hu (numpy.ndarray):
+                shape: (N, control_dim, )
         """
-        jac_high = states[:-1] - self.environment.state_space.high
-        jac_low = -states[:-1] + self.environment.state_space.low
-        hx = self.q1*self.q2*(np.exp(self.q2*jac_high) + np.exp(self.q2*jac_low))
-        Hxx = np.array([np.diag(self.q2*h) for h in hx])
-        jac_high = controls - self.environment.control_space.high
-        jac_low = - controls + self.environment.control_space.low
-        hu = self.q1 * self.q2 * (np.exp(self.q2 * jac_high) + np.exp(self.q2 * jac_low))
-        Huu = np.array([np.diag(self.q2 * h) for h in hu])
+        if self.constrained_state:
+            jac_high = states[:-1] - self.environment.state_space.high
+            jac_low = -states[:-1] + self.environment.state_space.low
+            hx = self.q1*self.q2*(np.exp(self.q2*jac_high) + np.exp(self.q2*jac_low))
+            Hxx = np.array([np.diag(self.q2*h) for h in hx])
+        else:
+            hx = np.zeros((self.horizon, self.environment.state_dim))
+            Hxx = np.zeros((self.horizon, self.environment.state_dim, self.environment.state_dim))
+        if self.constrained_control and not self.solve_qp:
+            jac_high = controls - self.environment.control_space.high
+            jac_low = -controls + self.environment.control_space.low
+            hu = self.q1 * self.q2 * (np.exp(self.q2 * jac_high) + np.exp(self.q2 * jac_low))
+            Huu = np.array([np.diag(self.q2 * h) for h in hu])
+        else:
+            hu = np.zeros((self.horizon, self.environment.control_dim))
+            Huu = np.zeros((self.horizon, self.environment.control_dim, self.environment.control_dim))
         return Hxx, hx, Huu, hu
 
     def _constraint_cost(self, state, control):
-        cost = np.sum(self.q1*(np.exp(self.q2*(state - self.environment.state_space.high)) +
-                               np.exp(self.q2*(- state + self.environment.state_space.low))))
-        cost += np.sum(self.q1*(np.exp(self.q2*(control - self.environment.control_space.high)) +
-                                np.exp(self.q2*(-control + self.environment.control_space.low))))
+        cost = 0.
+        if self.constrained_state:
+            cost += np.sum(self.q1*(np.exp(self.q2*(state - self.environment.state_space.high)) +
+                                    np.exp(self.q2*(- state + self.environment.state_space.low))))
+        if self.constrained_control and not self.solve_qp:
+            cost += np.sum(self.q1*(np.exp(self.q2*(control - self.environment.control_space.high)) +
+                                    np.exp(self.q2*(- control + self.environment.control_space.low))))
         return cost
 
     def _decrease_mu(self):
@@ -495,8 +563,14 @@ class iLQR(object):
 if __name__=="__main__":
     env = CartPole()
     horizon = 5.
-    algo = iLQR(env, horizon, terminal_cost_factor=1.)
-    algo.solve()
+    algo = iLQR(env, horizon, terminal_cost_factor=2000.)
+    sol = algo.solve()
     env.plot()
+    vid = VideoRecorder(env, 'recording/video.mp4')
+    env.reset()
+    for control in sol['controls']:
+        env.step(control)
+        # env.render()
+        vid.capture_frame()
+    vid.close()
     plt.show()
-
