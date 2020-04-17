@@ -3,6 +3,7 @@ import symbtools.modeltools as mt
 
 def create_save_model(T, V, qq, Q, R, params, file):
     mod = mt.generate_symbolic_model(T, V, qq, Q, dissipation_function=R, simplify=False)
+    print(type(mod))
     # calculate state-space model and partial linearization,
     # where the input are the accelerations of the actuated state variables
     mod.calc_state_eq(simplify=False)

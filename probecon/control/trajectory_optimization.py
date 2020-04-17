@@ -1,6 +1,5 @@
 import numpy as np
 from probecon.helpers.pygent_helpers import PygentEnvWrapper
-from probecon.helpers.mpctools_helpers import MPCToolsWrapper
 from probecon.system_models.cart_pole import CartPole
 
 from gym.wrappers.monitoring.video_recorder import VideoRecorder
@@ -71,7 +70,7 @@ class TrajectoryOptimization(object):
 
 
 if __name__ == '__main__':
-    def c_k(x, u, mod):
+    def c_k(x, u):
         x2, x1, x4, x3 = x
         u1, = u
         c = 2*x1**2 + 0.01*x2** 2 + 0.01*x3**2 + 0.01*x4**2 + 0.01*u1**2
@@ -84,7 +83,7 @@ if __name__ == '__main__':
         return c
 
 
-    init_state = np.array([np.pi, np.pi, 0, 0])
+    init_state = np.array([np.pi, 0, 0, 0])
     t = 6.
     dt = 0.02
 
@@ -98,10 +97,11 @@ if __name__ == '__main__':
 
     for u in sol['u_sim']:
         env.step(u)
-        #env.render()
-        vid.capture_frame()
-    vid.close()
-    #env.close()
+        env.render()
+        #vid.capture_frame()
+    #vid.close()
+    env.close()
+    env.plot()
 
 
 
