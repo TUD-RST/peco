@@ -6,12 +6,12 @@ from probecon.system_models.cart_pole import CartPole
 from probecon.control.ilqr import iLQR
 
 env = CartPole()
-horizon = 5.
+horizon = 3.
 algorithm = iLQR(env, horizon, terminal_cost_factor=100.)
 sol = algorithm.solve()
 env.plot()
-plt.show()
-vid = VideoRecorder(env, 'recording/video.mp4')
+plt.savefig('recording/cartpole.pdf')
+vid = VideoRecorder(env, 'recording/cartpole.mp4')
 env.reset()
 for control in sol['controls']:
     env.step(control)

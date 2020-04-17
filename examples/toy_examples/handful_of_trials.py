@@ -39,6 +39,7 @@ data = SimpleDataSet(xx, yy, batch_size=100, shuffle=True)
 # plot data
 x = np.linspace(-5*np.pi, 5*np.pi, 100).reshape(100, 1)
 y = np.sin(x)
+plt.figure(1)
 plt.plot(xx.numpy(),yy.numpy(),'xg', label='data points', markersize=3, alpha=0.3)
 plt.plot(x, y, 'k-', label='ground truth: $y=\sin(x)$')
 plt.grid()
@@ -46,7 +47,7 @@ plt.xlabel('x')
 plt.ylabel('y')
 plt.legend()
 plt.ylim([-2,2])
-plt.show()
+plt.plot()
 
 # train ensemble model
 epochs = 40
@@ -54,6 +55,7 @@ ensemble = DeepEnsemble(num_models=5, hidden_layers=[30, 30, 30], activation='sw
 ensemble.train_ensemble(data, epochs, loss_fnc='nll', lr=5e-3, weight_decay=1e-5)
 
 # plot submodels output
+plt.figure(2)
 plt.plot(xx.numpy(),yy.numpy(),'xg', label='data points', markersize=3, alpha=0.3)
 plt.plot(x, y, 'k-', label='ground truth: $y=\sin(x)$')
 means, stds = ensemble._forward_submodels(torch.tensor(x).float())
@@ -69,9 +71,9 @@ plt.xlabel('x')
 plt.ylabel('y')
 plt.grid(True)
 plt.ylim([-2,2])
-plt.show()
 
 # plot ensemble model output
+plt.figure(3)
 plt.plot(xx.numpy(),yy.numpy(),'xg', label='data points', markersize=3, alpha=0.3)
 plt.plot(x, y, 'k-', label='ground truth: $y=\sin(x)$')
 mean, std, std_mean = ensemble(torch.tensor(x).float())

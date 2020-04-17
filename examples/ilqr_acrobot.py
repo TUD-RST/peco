@@ -9,17 +9,19 @@ sim_time = 5.
 
 env = Acrobot()
 
-traj_opt = iLQR(env, sim_time, terminal_cost_factor=100)
+traj_opt = iLQR(env, sim_time, terminal_cost_factor=1000, constrained_state=False)
 
 sol = traj_opt.solve()
 
-vid = VideoRecorder(env, 'recording/video.mp4')
+env.plot()
+plt.savefig('recording/acrobot.pdf')
 
+vid = VideoRecorder(env, 'recording/acrobot.mp4')
+env.reset()
 for control in sol['controls']:
     env.step(control)
     vid.capture_frame()
 vid.close()
-env.plot()
-plt.show()
+
 
 

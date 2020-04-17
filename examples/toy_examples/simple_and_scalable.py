@@ -30,6 +30,7 @@ data = SimpleDataSet(xx, yy, batch_size=1, shuffle=True)
 # plot data set
 x = np.linspace(-6, 6, 100).reshape(100, 1)
 y = x**3
+plt.figure(1)
 plt.plot(x, y, 'b-', label='ground truth: $y=x^3$')
 plt.plot(xx.numpy(),yy.numpy(),'or', label='data points')
 plt.grid()
@@ -37,7 +38,6 @@ plt.xlim(-6., 6.)
 plt.xlabel('x')
 plt.ylabel('y')
 plt.legend()
-plt.show()
 
 # train ensemble model (parameters from the paper)
 epochs = 40
@@ -46,6 +46,7 @@ ensemble.train_ensemble(data, epochs, loss_fnc='nll', lr=0.1, weight_decay=0.)
 
 
 # plot ensemble model output
+plt.figure(2)
 plt.plot(x, y, 'b-', label='ground truth: $y=x^3$')
 plt.plot(xx.numpy(),yy.numpy(),'or', label='data points')
 mean, std, std_mean = ensemble(torch.tensor(x).float())
@@ -56,12 +57,11 @@ color = mean_plot[0].get_color()
 plt.fill_between(x.reshape(100,), (mean-3*std).reshape(100,), (mean+3*std).reshape(100,),alpha=0.2, color=color)
 plt.fill_between(x.reshape(100,), (mean-std).reshape(100,), (mean+std).reshape(100,), alpha=0.3, color=color)
 plt.grid()
+plt.title('Parameters from the paper')
 plt.xlim(-6., 6.)
 plt.xlabel('x')
 plt.ylabel('y')
 plt.legend()
-plt.show()
-
 
 # train ensemble model (own parameters)
 
@@ -73,6 +73,7 @@ ensemble.train_ensemble(data, epochs, loss_fnc='nll', lr=0.01, weight_decay=0.0)
 
 
 # plot ensemble model output
+plt.figure(3)
 plt.plot(x, y, 'b-', label='ground truth: $y=x^3$')
 plt.plot(xx.numpy(),yy.numpy(),'or', label='data points')
 mean, std, std_mean = ensemble(torch.tensor(x).float())
@@ -83,6 +84,7 @@ color = mean_plot[0].get_color()
 plt.fill_between(x.reshape(100,), (mean-3*std).reshape(100,), (mean+3*std).reshape(100,),alpha=0.2, color=color)
 plt.fill_between(x.reshape(100,), (mean-std).reshape(100,), (mean+std).reshape(100,), alpha=0.3, color=color)
 plt.grid()
+plt.title('Own parameters')
 plt.xlim(-6., 6.)
 plt.xlabel('x')
 plt.ylabel('y')

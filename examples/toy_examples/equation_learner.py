@@ -33,13 +33,13 @@ data = SimpleDataSet(xx, yy, batch_size=20, shuffle=True)
 # plot data
 x = np.linspace(-6., 6., 100).reshape(100, 1)
 y = np.sin(np.pi*x)/(x**2 + 1)
+plt.figure(1)
 plt.plot(x, y, 'k-', label=r'ground truth: $y=\frac{\sin(\pi x_1)}{x^2+1}$')
 plt.grid()
 plt.xlabel(r'$x_1=x_2=x$')
 plt.ylabel(r'$y$')
 plt.legend()
 plt.ylim([-2,2])
-plt.show()
 
 # train ensemble model
 epochs = 40
@@ -47,6 +47,7 @@ ensemble = DeepEnsemble(num_models=5, inputs=2, outputs=1, hidden_layers=[20, 20
 ensemble.train_ensemble(data, epochs, loss_fnc='nll', lr=1e-3, weight_decay=1e-4)
 
 # plot ensemble model output
+plt.figure(2)
 plt.plot(x, y, 'k-', label=r'ground truth: $y=\frac{\sin(\pi x_1)}{x^2+1}$')
 x_input = torch.tensor(x@np.ones((1, 2)), dtype=torch.float32)
 mean, std, std_mean = ensemble(x_input)
