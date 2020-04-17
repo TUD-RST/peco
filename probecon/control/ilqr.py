@@ -1,7 +1,6 @@
 import numpy as np
 import time
 import cvxopt as opt
-import numba
 opt.solvers.options['show_progress'] = False
 
 class iLQR(object):
@@ -58,7 +57,7 @@ class iLQR(object):
                  constrained_state=True,
                  solve_qp=True,
                  q1=1., # 1.
-                 q2=1., # 500.
+                 q2=500., # 500.
                  q3=1000.,
                  q4=50.):
         """

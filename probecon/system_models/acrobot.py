@@ -17,28 +17,28 @@ class Acrobot(SymbtoolsEnv):
 
     """
     def __init__(self,
-                 time_step=0.01,
+                 time_step=0.03,
                  init_state=np.array([np.pi, np.pi, 0., 0.]),
                  goal_state=None,
-                 state_cost=np.array([1., 1., 0.01, 0.01]),
+                 state_cost=np.array([2., 0.5, 0.02, 0.02]),
                  control_cost=np.array([0.05]),
                  cost_function=None,
-                 state_bounds=np.array([2*pi, 2*pi, inf, inf]),
-                 control_bounds=np.array([15.]),
+                 state_bounds=np.array([inf, inf, 5., 5.]),
+                 control_bounds=np.array([20.]),
                  mod_file='acrobot.p',
-                 part_lin=False,
+                 part_lin=True,
                  ode_error=None,
-                 m0=0.3583,
-                 m1=0.3583,
-                 J0=0.0379999,
-                 J1=0.0379999,
+                 m0=0.3,
+                 m1=0.3,
+                 J0=0.0047,
+                 J1=0.0047,
                  l0=0.5,
                  l1=0.5,
                  a0=0.25,
                  a1=0.25,
                  g=9.81,
-                 d0=0.006588,
-                 d1=0.006588):
+                 d0=0.01,
+                 d1=0.01):
         """
 
          Args:
