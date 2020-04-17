@@ -377,7 +377,7 @@ def modeling():
 
     # Lagrange equations of the second kind
     # d/dt(dL/d(dq_i/dt)) - dL/dq_i + dR/d(dq_i/dt)= Q_i
-    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_models/cart_quad_pole.p')
+    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_model_files/cart_quad_pole.p')
     return mod
 
 if __name__ == '__main__':

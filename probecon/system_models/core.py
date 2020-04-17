@@ -137,11 +137,11 @@ class StateSpaceEnv(gym.Env):
         """
         if control.shape != (self.control_dim, ):
             raise AssertionError("'control' has to be an array with shape '(control_dim,)'")
-        control = np.clip(control, self.control_space.low, self.control_space.high)
+        #control = np.clip(control, self.control_space.low, self.control_space.high)
         self.old_state = self.state
         self.state = self._simulation(control)
         self._append_transition(self.state, control)
-        reward = -self._eval_cost(self.state, control)
+        reward = -self._eval_cost(self.old_state, control)
         done = self._done()
         info = {}
         return self.state, reward, done, info
@@ -413,7 +413,7 @@ class SymbtoolsEnv(StateSpaceEnv):
         package_file_directory = os.path.dirname(os.path.abspath(__file__))
         if mod_file.find('/') == -1:
             # if file only contains the filename, use the packages model fiels
-            mod_file = os.path.join(package_file_directory, 'symbtools_models', mod_file)
+            mod_file = os.path.join(package_file_directory, 'symbtools_model_files', mod_file)
         with open(mod_file, 'rb') as open_file:
             self.mod =  pickle.load(open_file)
         if part_lin:

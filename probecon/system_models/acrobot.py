@@ -2,6 +2,8 @@ import sympy as sp
 import symbtools as st
 import numpy as np
 import pyglet
+import pickle
+import matplotlib.pyplot as plt
 
 from numpy import pi, inf
 
@@ -18,8 +20,8 @@ class Acrobot(SymbtoolsEnv):
                  time_step=0.01,
                  init_state=np.array([np.pi, np.pi, 0., 0.]),
                  goal_state=None,
-                 state_cost=None,
-                 control_cost=None,
+                 state_cost=np.array([1., 1., 0.01, 0.01]),
+                 control_cost=np.array([0.05]),
                  cost_function=None,
                  state_bounds=np.array([2*pi, 2*pi, inf, inf]),
                  control_bounds=np.array([15.]),
@@ -305,13 +307,14 @@ def modeling():
 
     # Lagrange equations of the second kind
     # d/dt(dL/d(dq_i/dt)) - dL/dq_i + dR/d(dq_i/dt)= Q_i
-    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_models/acrobot.p')
+    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_model_files/acrobot.p')
     return mod
 
 if __name__ == '__main__':
     modeling()
-    env = Acrobot(init_state=np.array([0.1, 0.1, 0, 0]))
-    for i in range(1000):
+    env = Acrobot()
+    env.reset()
+    for i in range(500):
         env.random_step()
         env.render()
-    #env.close()
+    env.close()

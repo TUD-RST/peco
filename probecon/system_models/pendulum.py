@@ -15,14 +15,14 @@ class Pendulum(SymbtoolsEnv):
 
     """
     def __init__(self,
-                 time_step=0.01,
+                 time_step=0.02,
                  init_state=np.array([np.pi, 0.]),
                  goal_state=None,
                  state_cost=np.array([1., 0.1]),
                  control_cost=np.array([0.05]),
                  cost_function=None,
-                 state_bounds=np.array([2*pi, inf]),
-                 control_bounds=np.array([2.]),
+                 state_bounds=np.array([2*pi, 2.]),
+                 control_bounds=np.array([3.]),
                  mod_file='pendulum.p',
                  ode_error=None,
                  m0=1.0,
@@ -257,7 +257,7 @@ def modeling():
 
     # Lagrange equations of the second kind
     # d/dt(dL/d(dq_i/dt)) - dL/dq_i + dR/d(dq_i/dt)= Q_i
-    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_models/pendulum.p')
+    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_model_files/pendulum.p')
     return mod
 
 if __name__ == '__main__':

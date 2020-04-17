@@ -20,11 +20,11 @@ class CartPole(SymbtoolsEnv):
     """
     def __init__(self, time_step=0.02, init_state=np.array([pi, 0., 0., 0.]),
                  goal_state=None,
-                 state_cost=np.array([10., 20., 0.02, 0.02]),
+                 state_cost=np.array([5., 10., 0.01, 0.01]),
                  control_cost=np.array([0.1]),
                  cost_function=None,
-                 state_bounds=np.array([2*pi, 1.2, inf, 4.]),
-                 control_bounds=np.array([40.]),
+                 state_bounds=np.array([2*pi, 1.2, 10., 4.]),
+                 control_bounds=np.array([15.]),
                  mod_file='cart_pole.p',
                  part_lin=True,
                  ode_error=None,
@@ -252,7 +252,7 @@ def modeling():
 
     # Lagrange equations of the second kind
     # d/dt(dL/d(dq_i/dt)) - dL/dq_i + dR/d(dq_i/dt)= Q_i
-    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_models/cart_pole.p')
+    mod = create_save_model(T, V, qq, Q, R, params, 'symbtools_model_files/cart_pole.p')
     return mod
 
 if __name__ == '__main__':
