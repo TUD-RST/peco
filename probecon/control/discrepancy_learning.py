@@ -3,7 +3,7 @@ import numpy as np
 
 from torch.utils.tensorboard import SummaryWriter
 
-from probecon.nn_models.deep_ensemble import StateSpaceModelDeepEnsemble
+from probecon.neural_networks.deep_ensemble import StateSpaceModelDeepEnsemble
 from probecon.data.dataset import TransitionDataSet
 from probecon.control.trajectory_optimization import TrajectoryOptimization
 from probecon.system_models.pendulum import Pendulum
