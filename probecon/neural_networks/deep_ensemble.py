@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from probecon.nn_models.mlp import GaussianMLP
+from probecon.neural_networks.mlp import GaussianMLP
 from probecon.helpers.nn_helpers import NLLloss
 
 class DeepEnsemble(nn.Module):
