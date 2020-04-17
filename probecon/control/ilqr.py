@@ -1,12 +1,8 @@
-import torch
 import numpy as np
-import matplotlib.pyplot as plt
 import time
 import cvxopt as opt
+import numba
 opt.solvers.options['show_progress'] = False
-
-from probecon.system_models.cart_pole import CartPole
-from gym.wrappers.monitoring.video_recorder import VideoRecorder
 
 class iLQR(object):
     """
@@ -59,12 +55,12 @@ class iLQR(object):
                  tolerance_cost=1e-7,
                  parallel_line_search=False,
                  constrained_control=True,
-                 constrained_state=False,
-                 solve_qp=False,
-                 q1=0.001,
-                 q2=500.,
+                 constrained_state=True,
+                 solve_qp=True,
+                 q1=1., # 1.
+                 q2=1., # 500.
                  q3=1000.,
-                 q4=20.):
+                 q4=50.):
         """
 
         Args:
@@ -160,6 +156,7 @@ class iLQR(object):
                     line-search parameter
 
         """
+        # todo: add an adaptive procedure for tuning the penalty paramters q1 and q2
         start_time = time.time()
         states, controls, cost = self._initial_forward_pass()
         for iter in range(self.max_iterations):
@@ -288,7 +285,7 @@ class iLQR(object):
         cost = 0.
         for k in range(self.horizon):
             control = np.zeros(self.environment.control_dim)
-            cost += self._constraint_cost(env.state, control)
+            cost += self._constraint_cost(self.environment.state, control)
             state, reward, done, info = self.environment.step(control)
             cost -= reward
         states = self.environment.trajectory['states']
@@ -318,7 +315,7 @@ class iLQR(object):
         """
         A, B = self._taylor_system(states, controls)
         Cxx, Cuu, Cxu, Cux, cx, cu, Cxx_N, cx_N = self._taylor_cost(states, controls)
-        Hxx, hx, Huu, hu = self._taylor_constraints(states, controls)
+        Hxx, hx, Huu, hu = self._taylor_constraints(states, controls) # penalty costs
         N = self.horizon + 1
 
         Vxx = np.zeros((N, self.environment.state_dim, self.environment.state_dim))
@@ -489,16 +486,9 @@ class iLQR(object):
 
     def _taylor_constraints(self, states, controls):
         """
-        2nd order Taylor approximation of the state constrained barrier function
+        1st and 2nd order Taylor approximation of the barrier function in the penalty method
 
-        with x_k = state_k - state_ref_k, u_k = control_k - control_ref_k
-
-        index 'ref' indicates trajectory, where the linearization takes place (states, controls)
-
-        for k = 0,...,N-1
-        c_k = 0.5*(x_k.T@Cxx[k]@x + u_k.T@Cuu[k]@u_k.T + x_k.T@Cxu[k]@u_k.T + u_k.T@Cux[k]@x_k) + cx_k@x_k + cu_k@u_k)
-
-        c_N = 0.5*x_N.T@Cxx_N@x_N + cx_N@x_N
+        See paper 3) section 2.C
 
         Args:
             states (numpy.ndarray):
@@ -508,33 +498,52 @@ class iLQR(object):
 
         Returns:
             Hxx (numpy.ndarray):
-                shape: (N, state_dim, state_dim)
+                hessian of the barrier function with respect to the state, shape: (N, state_dim, state_dim)
             hx (numpy.ndarray):
-                shape: (N, state_dim, )
+                jacobian of the barrier function with respect to the state, shape: (N, state_dim, )
             Huu (numpy.ndarray):
-                shape: (N, control_dim, control_dim)
+            hessian of the barrier function with respect to the control, shape: (N, control_dim, control_dim)
             hu (numpy.ndarray):
-                shape: (N, control_dim, )
+                jacobian of the barrier function with respect to the control, shape: (N, control_dim, )
         """
         if self.constrained_state:
-            jac_high = states[:-1] - self.environment.state_space.high
-            jac_low = -states[:-1] + self.environment.state_space.low
-            hx = self.q1*self.q2*(np.exp(self.q2*jac_high) + np.exp(self.q2*jac_low))
-            Hxx = np.array([np.diag(self.q2*h) for h in hx])
+            f_high = states[:-1] - self.environment.state_space.high
+            f_low = -states[:-1] + self.environment.state_space.low
+            hx_high = self.q1*self.q2*np.exp(self.q2*f_high) # equation (11) in paper 3)
+            hx_low = -self.q1*self.q2*np.exp(self.q2*f_low) # equation (11) in paper 3)
+            hx = hx_high + hx_low
+            Hxx = np.array([np.diag(self.q2*(h_high - h_low)) for h_high, h_low in zip(hx_high, hx_low)]) # equation (12) in paper 3)
         else:
             hx = np.zeros((self.horizon, self.environment.state_dim))
             Hxx = np.zeros((self.horizon, self.environment.state_dim, self.environment.state_dim))
         if self.constrained_control and not self.solve_qp:
-            jac_high = controls - self.environment.control_space.high
-            jac_low = -controls + self.environment.control_space.low
-            hu = self.q1 * self.q2 * (np.exp(self.q2 * jac_high) + np.exp(self.q2 * jac_low))
-            Huu = np.array([np.diag(self.q2 * h) for h in hu])
+            f_high = controls - self.environment.control_space.high
+            f_low = -controls + self.environment.control_space.low
+            hu_high = self.q1 * self.q2 * (np.exp(self.q2 * f_high)) # equation (11) in paper 3)
+            hu_low = -self.q1 * self.q2 * (np.exp(self.q2 * f_low)) # equation (11) in paper 3)
+            hu = hu_high + hu_low
+            Huu = np.array([np.diag(self.q2*(h_high - h_low)) for h_high, h_low in zip(hu_high, hu_low)]) # equation (12) in paper 3)
         else:
             hu = np.zeros((self.horizon, self.environment.control_dim))
             Huu = np.zeros((self.horizon, self.environment.control_dim, self.environment.control_dim))
         return Hxx, hx, Huu, hu
 
     def _constraint_cost(self, state, control):
+        """
+        Barrier function for the penalty method (equation (9) in paper 3))
+
+            q1*exp(q2*f)
+
+        Args:
+            states (numpy.ndarray):
+                state trajectory, shape: (N, state_dim)
+            controls (numpy.ndarray):
+                control input trajectory, shape: (N-1, control_dim)
+
+        Returns:
+            cost (float):
+                penalty cost
+        """
         cost = 0.
         if self.constrained_state:
             cost += np.sum(self.q1*(np.exp(self.q2*(state - self.environment.state_space.high)) +
@@ -542,6 +551,7 @@ class iLQR(object):
         if self.constrained_control and not self.solve_qp:
             cost += np.sum(self.q1*(np.exp(self.q2*(control - self.environment.control_space.high)) +
                                     np.exp(self.q2*(- control + self.environment.control_space.low))))
+
         return cost
 
     def _decrease_mu(self):
@@ -559,18 +569,3 @@ class iLQR(object):
         self.mu_d = max(self.mu_d0, self.mu_d0 * self.mu_d)
         self.mu = max(self.mu_min, self.mu * self.mu_d)
         pass
-
-if __name__=="__main__":
-    env = CartPole()
-    horizon = 5.
-    algo = iLQR(env, horizon, terminal_cost_factor=2000.)
-    sol = algo.solve()
-    env.plot()
-    vid = VideoRecorder(env, 'recording/video.mp4')
-    env.reset()
-    for control in sol['controls']:
-        env.step(control)
-        # env.render()
-        vid.capture_frame()
-    vid.close()
-    plt.show()
