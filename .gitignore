@@ -1,6 +1,7 @@
 build
 dist
 .idea
+.ipynb_checkpoints/
 Probabilistic_Ennsembles_for_Control.egg-info
 probecon.egg-info
 results

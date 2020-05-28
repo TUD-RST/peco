@@ -1,10 +1,10 @@
-# PEC - Probabilistic Ensembles for Control
+# PECO - Probabilistic Ensembles for Control
 
 This module contains functions and classes to apply probabilistic machine learning techniques to control problems.
 
 It contains standard neural networks and deep ensemble models as well as a constrained trajectory optimization method (constrained iLQR) for solving nonlinear optimal control problems.
 
-In future versions it will be contain reinforcement learning techniques.
+In future versions it will also contain model-based reinforcement learning algorithms.
 
 
 The project is structured as follows:

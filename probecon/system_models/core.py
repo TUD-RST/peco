@@ -147,9 +147,16 @@ class StateSpaceEnv(gym.Env):
         return self.state, reward, done, info
 
     def random_step(self):
+        '''    
         if self.control_space.is_bounded():
             random_control = self.control_space.sample()
+
         else:
+            random_control = np.random.uniform(-1., 1., self.control_dim)
+        '''
+        try:
+            random_control = self.control_space.sample()
+        except:
             random_control = np.random.uniform(-1., 1., self.control_dim)
         state, reward, done, info = self.step(random_control)
         return state, reward, done, info
