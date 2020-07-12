@@ -13,7 +13,7 @@ The project is structured as follows:
 ├──examples                             - example scripts
 │   └──toy_examples                     - toy examples with deep ensemble models
 │   
-├──probecon                         - package
+├──peco                         - package
 │   ├──control                      - control algorithms (trajectory optimization, reinforcement learning)
 │   ├──data                         - data sets for machine learning tasks
 │   ├──helpers                      - helper functions and wrappers for different packages

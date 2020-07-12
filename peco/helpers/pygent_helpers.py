@@ -14,7 +14,7 @@ class PygentEnvWrapper(StateSpaceModel):
         """
 
         Args:
-            environment (probecon.StateSpaceEnv):
+            environment (peco.StateSpaceEnv):
                 environment object that should be wrapped
         """
 

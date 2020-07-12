@@ -1,8 +1,8 @@
 import numpy as np
 
 import matplotlib.pyplot as plt
-from probecon.control.ilqr import iLQR
-from probecon.system_models.acrobot import Acrobot
+from peco.control.ilqr import iLQR
+from peco.system_models.acrobot import Acrobot
 from gym.wrappers.monitoring.video_recorder import VideoRecorder
 
 sim_time = 5.

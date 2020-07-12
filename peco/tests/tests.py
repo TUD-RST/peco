@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
-from probecon.system_models.core import StateSpaceEnv
-from probecon.system_models.cart_triple_pole import CartTriplePole
+from peco.system_models.core import StateSpaceEnv
+from peco.system_models.cart_triple_pole import CartTriplePole
 class TestStateSpaceEnv(unittest.TestCase):
 
     def test_init_correct_input(self):

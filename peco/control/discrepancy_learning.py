@@ -3,10 +3,10 @@ import numpy as np
 
 from torch.utils.tensorboard import SummaryWriter
 
-from probecon.neural_networks.deep_ensemble import StateSpaceModelDeepEnsemble
-from probecon.data.dataset import TransitionDataSet
-from probecon.control.trajectory_optimization import TrajectoryOptimization
-from probecon.system_models.pendulum import Pendulum
+from peco.neural_networks.deep_ensemble import StateSpaceModelDeepEnsemble
+from peco.data.dataset import TransitionDataSet
+from peco.control.trajectory_optimization import TrajectoryOptimization
+from peco.system_models.pendulum import Pendulum
 
 class DiscrepancyLearner(object):
     """
@@ -35,9 +35,9 @@ class DiscrepancyLearner(object):
         """
 
         Args:
-            real_environment (probecon.system_models.StateSpaceEnv):
+            real_environment (peco.system_models.StateSpaceEnv):
                 environment that represents the test bench / real environment
-            model_environment (probecon.system_models.StateSpaceEnv):
+            model_environment (peco.system_models.StateSpaceEnv):
                 environment that represents the model that is used in the controller design
             sim_time (float):
                 time horizon of the trajectory optimization

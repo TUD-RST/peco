@@ -2,8 +2,8 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-from probecon.neural_networks.deep_ensemble import DeepEnsemble
-from probecon.data.dataset import SimpleDataSet
+from peco.neural_networks.deep_ensemble import DeepEnsemble
+from peco.data.dataset import SimpleDataSet
 
 torch.manual_seed(0)
 np.random.seed(0)

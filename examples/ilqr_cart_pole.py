@@ -2,8 +2,8 @@
 import matplotlib.pyplot as plt
 from gym.wrappers.monitoring.video_recorder import VideoRecorder
 
-from probecon.system_models.cart_pole import CartPole
-from probecon.control.ilqr import iLQR
+from peco.system_models.cart_pole import CartPole
+from peco.control.ilqr import iLQR
 
 env = CartPole()
 horizon = 3.

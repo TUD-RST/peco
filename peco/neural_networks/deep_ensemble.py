@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from probecon.neural_networks.mlp import GaussianMLP
-from probecon.helpers.nn_helpers import NLLloss
+from peco.neural_networks.mlp import GaussianMLP
+from peco.helpers.nn_helpers import NLLloss
 
 class DeepEnsemble(nn.Module):
     """
@@ -207,7 +207,7 @@ class DeepEnsemble(nn.Module):
             dataset (torch.utils.data.DataSet):
                 data set containing the input and target data
 
-            model (probecon.nn_model.mlp.GaussianMLP):
+            model (peco.nn_model.mlp.GaussianMLP):
                 sub-model of the ensemble
             loss (str):
                 'nll': training using the negative log-likelihood

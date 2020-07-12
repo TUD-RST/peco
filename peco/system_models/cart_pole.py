@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 from numpy import pi, inf
 from gym.wrappers.monitoring.video_recorder import VideoRecorder
 
-from probecon.system_models.core import SymbtoolsEnv, Parameters
-from probecon.helpers.gym_helpers import DrawText
-from probecon.helpers.symbtools_helpers import create_save_model
+from peco.system_models.core import SymbtoolsEnv, Parameters
+from peco.helpers.gym_helpers import DrawText
+from peco.helpers.symbtools_helpers import create_save_model
 
 
 class CartPole(SymbtoolsEnv):

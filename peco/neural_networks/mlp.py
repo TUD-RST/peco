@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from probecon.helpers.nn_helpers import Swish
+from peco.helpers.nn_helpers import Swish
 
 class MLP(nn.Module):
     """

@@ -63,7 +63,7 @@ class iLQR(object):
         """
 
         Args:
-            environment (probecon.system_model.core.SymbtoolsEnv):
+            environment (peco.system_model.core.SymbtoolsEnv):
                 environment obejct of optimization
             terminal_cost_factor (float):
                 scalar, by which the identity matrix is multiplied to form the terminal cost matrix

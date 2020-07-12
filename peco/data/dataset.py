@@ -1,7 +1,7 @@
 import torch
 import pickle
 from torch.utils.data import Dataset, DataLoader
-from probecon.system_models.cart_pole import CartPole
+from peco.system_models.cart_pole import CartPole
 
 class SimpleDataSet(Dataset):
     """
@@ -110,7 +110,7 @@ class TransitionDataSet(Dataset):
                 control input dimension
             file (str):
                 file to load
-            data_set (probecon.data.dataset.TrajectoryDataSet, probecon.data.dataset.TransitionDataSet):
+            data_set (peco.data.dataset.TrajectoryDataSet, peco.data.dataset.TransitionDataSet):
                 data set that is loaded
             batch_size (int):
                 batch size for training

@@ -1,6 +1,6 @@
 import numpy as np
-from probecon.helpers.pygent_helpers import PygentEnvWrapper
-from probecon.system_models.cart_pole import CartPole
+from peco.helpers.pygent_helpers import PygentEnvWrapper
+from peco.system_models.cart_pole import CartPole
 
 from gym.wrappers.monitoring.video_recorder import VideoRecorder
 
@@ -17,7 +17,7 @@ class TrajectoryOptimization(object):
         """
 
         Args:
-            environment (probecon.system_models.core.StateSpaceEnv):
+            environment (peco.system_models.core.StateSpaceEnv):
                 environment to which the trajectory optimization is applied to
             sim_time (float):
                 length of the trajectory
